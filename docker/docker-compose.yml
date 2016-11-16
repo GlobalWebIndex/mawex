@@ -1,0 +1,20 @@
+version: '2'
+services:
+
+    mawex:
+        image: gwiq/mawex:latest
+        restart: unless-stopped
+        environment:
+            - JAVA_TOOL_OPTIONS=-Djava.net.preferIPv4Stack=true -Xmx128m
+
+    master:
+        extends:
+          service: mawex
+        ports:
+            - 2552:2552
+        command: master --host-name=master
+
+    workers:
+        extends:
+          service: mawex
+        command: workers --host-name=workers

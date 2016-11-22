@@ -19,20 +19,19 @@ object Build extends sbt.Build {
   lazy val libraryDeps = Seq(
     "org.backuity.clist"          %%  "clist-core"                  % "3.2.2",
     "org.backuity.clist"          %%  "clist-macros"                % "3.2.2"       % "provided",
-    "org.iq80.leveldb"            %   "leveldb"                     % "0.9",
-    "org.fusesource.leveldbjni"   %   "leveldbjni-all"              % "1.8",
+    "com.typesafe.akka"           %%  "akka-remote"                 % akkaVersion,
     "com.typesafe.akka"           %%  "akka-cluster"                % akkaVersion,
     "com.typesafe.akka"           %%  "akka-cluster-tools"          % akkaVersion,
     "com.typesafe.akka"           %%  "akka-persistence"            % akkaVersion,
+    "com.hootsuite"               %%  "akka-persistence-redis"      % "0.6.0",
     "com.typesafe.akka"           %%  "akka-testkit"                % akkaVersion   % "test",
-    "com.github.dnvriend"         %%  "akka-persistence-inmemory"   % "1.3.10"      % "test",
     "org.scalatest"               %%  "scalatest"                   % "3.0.0"       % "test",
     "com.lihaoyi"                 %   "ammonite-repl"               % "0.7.7"       % "test" cross CrossVersion.full
   )
 
   lazy val sharedSettings = Seq(
     organization := "net.globalwebindex",
-    version := "0.01-SNAPSHOT",
+    version := "0.02-SNAPSHOT",
     scalaVersion := "2.11.8",
     offline := true,
     assembleArtifact := false,
@@ -45,10 +44,6 @@ object Build extends sbt.Build {
     libraryDependencies ++= libraryDeps,
     autoCompilerPlugins := true,
     cancelable in Global := true,
-    assemblyMergeStrategy in assembly := {
-        case PathList("org", "iq80", "leveldb", xs @ _*) => MergeStrategy.first
-        case x => (assemblyMergeStrategy in assembly).value(x)
-      },
     resolvers ++= Seq(
       Resolver.sonatypeRepo("snapshots"),
       Resolver.typesafeRepo("releases"),
@@ -123,7 +118,6 @@ object Build extends sbt.Build {
     )
   }
 
-
   lazy val api = (project in file("src/api"))
     .settings(name := "mawex-api")
     .settings(publishSettings)
@@ -134,6 +128,7 @@ object Build extends sbt.Build {
     .enablePlugins(DockerPlugin)
     .settings(name := "mawex")
     .settings(sharedSettings)
+    .settings(publishSettings)
     .settings(assemblySettings("mawex", Some("gwi.mawex.Launcher")))
     .settings(deploySettings("java:8", "gwiq", "mawex", "gwi.mawex.Launcher"))
     .dependsOn(api)

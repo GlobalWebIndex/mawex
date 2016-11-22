@@ -12,6 +12,7 @@ import com.typesafe.config.ConfigFactory
 import gwi.mawex.OpenProtocol._
 import gwi.mawex._
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
+import redis.RedisClient
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
@@ -19,16 +20,19 @@ import scala.util.{Random, Success}
 
 object MawexSpec {
 
-  val clusterConfig = ConfigFactory.parseString("""
+  val clusterConfig = ConfigFactory.parseString(s"""
     akka {
       actor.provider = "akka.cluster.ClusterActorRefProvider"
       actor.warn-about-java-serializer-usage = false
       remote.netty.tcp.port=0
       cluster.metrics.enabled=off
-      persistence {
-        journal.plugin = "inmemory-journal"
-        snapshot-store.plugin = "inmemory-snapshot-store"
-      }
+      akka-persistence-redis.journal.class = "com.hootsuite.akka.persistence.redis.journal.RedisJournal"
+      persistence.journal.plugin = "akka-persistence-redis.journal"
+    }
+    redis {
+      host = localhost
+      port = 6379
+      sentinel = false
     }
     """.stripMargin)
 
@@ -61,8 +65,7 @@ object MawexSpec {
   }
 }
 
-class MawexSpec(_system: ActorSystem) extends TestKit(_system) with Matchers with FlatSpecLike with BeforeAndAfterAll with ImplicitSender {
-
+class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSupport with Matchers with FlatSpecLike with BeforeAndAfterAll with ImplicitSender {
   import MawexSpec._
 
   val workTimeout = 3.seconds
@@ -73,8 +76,15 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with Matchers wit
 
   val ConsumerGroup = "default"
 
+  val redisClient = new RedisClient("localhost", 6379)
+
+  override def beforeAll(): Unit = try super.beforeAll() finally {
+    startContainer("redis", "redis-test", 6379)(())
+  }
+
   override def afterAll(): Unit = {
     import scala.concurrent.ExecutionContext.Implicits.global
+    stopContainer("redis-test")(())
     val allTerminated = Future.sequence(Seq(
       system.terminate(),
       backendSystem.terminate(),

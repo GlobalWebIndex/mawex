@@ -50,8 +50,6 @@ object Service {
         .withFallback(ConfigFactory.load("master"))
     val system = ActorSystem("ClusterSystem", conf)
 
-    Master.startJournal(system, path = ActorPath.fromString(s"akka.tcp://ClusterSystem@$host:$port/user/store"))
-
     system.actorOf(
       ClusterSingletonManager.props(
         Master(taskTimeout),

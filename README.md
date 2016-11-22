@@ -37,14 +37,18 @@ It deals with following problems :
 It is based on [activator-akka-distributed-workers](https://github.com/typesafehub/activator-akka-distributed-workers) project, most of the credit goes there !!!
 
 ### mawex in action :
+
+Mawex akka persistence is tested with redis only because it is the best fit for mawex unless
+high amount of micro tasks are being submitted to it in which case something like cassandra would be a better fit.
+
 ```
-docker-compose -f docker/example-remote-client.yml up master workers client
+docker-compose -f docker/example-remote-client.yml up redis master workers client
 ```
 
 ### how-to ( W.I.P. )
 
 ```
-"net.globalwebindex" %% "mawex-api" % "0.01-SNAPSHOT"
+"net.globalwebindex" %% "mawex-api" % "0.02-SNAPSHOT"
 ```
 
 Provides you with API and `LocalMasterProxy` or `RemoteMasterProxy` actors, see `./example`

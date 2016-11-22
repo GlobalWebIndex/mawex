@@ -1,18 +1,15 @@
 package gwi.mawex
 
-import akka.actor.{ActorIdentity, ActorLogging, ActorPath, ActorRef, ActorSystem, Identify, Props, Terminated}
+import akka.actor.{ActorLogging, ActorRef, Props, Terminated}
 import akka.cluster.Cluster
 import akka.cluster.client.ClusterClientReceptionist
 import akka.cluster.pubsub.{DistributedPubSub, DistributedPubSubMediator}
-import akka.pattern.ask
 import akka.persistence.PersistentActor
-import akka.persistence.journal.leveldb.{SharedLeveldbJournal, SharedLeveldbStore}
-import akka.util.Timeout
 import gwi.mawex.InternalProtocol._
 import gwi.mawex.OpenProtocol._
 import gwi.mawex.State._
 
-import scala.concurrent.duration.{Deadline, FiniteDuration, _}
+import scala.concurrent.duration.{Deadline, FiniteDuration}
 import scala.util.{Failure, Success}
 
 class Master(workTimeout: FiniteDuration) extends PersistentActor with ActorLogging {
@@ -171,21 +168,5 @@ object Master {
   val ResultsTopic = "results"
 
   def apply(workTimeout: FiniteDuration): Props = Props(classOf[Master], workTimeout)
-
-  def startJournal(system: ActorSystem, path: ActorPath): Unit = {
-    import system.dispatcher
-    implicit val timeout = Timeout(15.seconds)
-    system.actorOf(Props[SharedLeveldbStore], "store")
-    (system.actorSelection(path) ? Identify(None)) onComplete {
-      case Success(ActorIdentity(_, Some(ref))) =>
-        SharedLeveldbJournal.setStore(ref, system)
-      case Success(_) =>
-        system.log.error("Shared journal not started at {}", path)
-        system.terminate()
-      case Failure(ex) =>
-        system.log.error("Lookup of shared journal at {} timed out", path)
-        system.terminate()
-    }
-  }
 
 }

@@ -39,14 +39,14 @@ object Service {
     str.split(",").map (_.split(":")).map( arr => Address(arr(0), arr(1).toInt) ).toList
   }
 
-  def startBackend(hostName: String, host: String, port: Int, taskTimeout: FiniteDuration): Unit = {
+  def startBackend(hostName: String, seedNodes: List[Address], taskTimeout: FiniteDuration): Unit = {
     val role = "backend"
-    val seedNode = s"akka.tcp://ClusterSystem@$host:$port"
+    val seedNodeAddresses = seedNodes.map { case Address(host, port) => s"akka.tcp://ClusterSystem@$host:$port" }
     val conf =
       ConfigFactory
         .parseString(s"akka.cluster.roles=[$role]")
         .withValue("akka.remote.netty.tcp.hostname", ConfigValueFactory.fromAnyRef(hostName))
-        .withValue("akka.cluster.seed-nodes", ConfigValueFactory.fromIterable(List(seedNode).asJava))
+        .withValue("akka.cluster.seed-nodes", ConfigValueFactory.fromIterable(seedNodeAddresses.asJava))
         .withFallback(ConfigFactory.load("master"))
     val system = ActorSystem("ClusterSystem", conf)
 
@@ -102,12 +102,7 @@ object MasterCmd extends Command(name = "master", description = "launches master
 
   var taskTimeout = opt[Int](default = 60*60, description = "timeout for a task in seconds")
   
-  require(seedNodes.size == 1, "Multiple masters not supported yet!")
-
-  def run() = {
-    val Address(host, port) = seedNodes.head
-    startBackend(hostName, host, port, taskTimeout.seconds)
-  }
+  def run() = startBackend(hostName, seedNodes, taskTimeout.seconds)
 
 }
 

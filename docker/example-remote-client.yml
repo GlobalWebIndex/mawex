@@ -16,6 +16,8 @@ services:
           service: mawex
         ports:
             - 2552:2552
+        depends_on:
+            - redis
         environment:
             - REDIS_HOST=redis
             - REDIS_PORT=6379
@@ -27,9 +29,13 @@ services:
           service: mawex
         ports:
             - 8999:8999
+        depends_on:
+            - master
         command: remote-client
 
     workers:
         extends:
           service: mawex
+        depends_on:
+            - master
         command: workers

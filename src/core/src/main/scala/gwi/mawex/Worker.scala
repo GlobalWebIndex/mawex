@@ -16,7 +16,7 @@ class Worker(clusterClient: ActorRef, consumerGroup: String, workExecutorProps: 
   val workerId = WorkerId(UUID.randomUUID().toString, consumerGroup)
 
   import context.dispatcher
-  val registerTask = context.system.scheduler.schedule(0.seconds, registerInterval, clusterClient, SendToAll("/user/master/singleton", w2m.Register(workerId)))
+  val registerTask = context.system.scheduler.schedule(500.millis, registerInterval, clusterClient, SendToAll("/user/master/singleton", w2m.Register(workerId)))
 
   val taskExecutor = context.watch(context.actorOf(workExecutorProps, "exec"))
 

@@ -16,12 +16,12 @@ object Launcher extends App {
   args.toList match {
     case service :: Nil if service == "master-with-local-client" =>
       val Address(host, port) = seedNodes.head
-      Service.startBackend("master", host, port, 10.seconds)
+      Service.startBackend("master", List(Address(host, port)), 10.seconds)
       Thread.sleep(5000)
       startLocalClient(0)
     case service :: Nil if service == "master" =>
       val Address(host, port) = seedNodes.head
-      Service.startBackend("master", host, port, 10.seconds)
+      Service.startBackend("master", List(Address(host, port)), 10.seconds)
       Thread.sleep(5000)
     case service :: Nil if service == "remote-client" =>
       startRemoteClient()

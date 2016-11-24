@@ -42,7 +42,8 @@ Mawex akka persistence is tested with redis only because it is the best fit for 
 high amount of micro tasks are being submitted to it in which case something like cassandra would be a better fit.
 
 ```
-docker-compose -f docker/example-remote-client.yml up redis master workers client
+$ cd docker
+docker-compose up
 ```
 
 ### how-to ( W.I.P. )

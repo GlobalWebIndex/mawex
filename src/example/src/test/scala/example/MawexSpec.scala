@@ -22,7 +22,7 @@ object MawexSpec {
 
   val clusterConfig = ConfigFactory.parseString(s"""
     akka {
-      actor.provider = "akka.cluster.ClusterActorRefProvider"
+      actor.provider = cluster
       actor.warn-about-java-serializer-usage = false
       remote.netty.tcp.port=0
       cluster.metrics.enabled=off
@@ -38,7 +38,7 @@ object MawexSpec {
 
   val workerConfig = ConfigFactory.parseString("""
     akka {
-      actor.provider = "akka.remote.RemoteActorRefProvider"
+      actor.provider = remote
       actor.warn-about-java-serializer-usage = false
       remote.netty.tcp.port=0
     }

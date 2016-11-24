@@ -1,3 +1,5 @@
+import java.io.File
+
 import sbt.Keys._
 import sbt._
 import sbtassembly.AssemblyPlugin.autoImport._
@@ -5,8 +7,12 @@ import sbtdocker.DockerPlugin
 import sbtdocker.DockerPlugin.autoImport._
 import sbtdocker.mutable.Dockerfile
 
+import scala.collection.immutable.TreeSet
+
 
 object Build extends sbt.Build {
+
+  lazy val appVersion = "0.03-SNAPSHOT"
 
   lazy val akkaVersion = "2.4.11"
 
@@ -31,7 +37,7 @@ object Build extends sbt.Build {
 
   lazy val sharedSettings = Seq(
     organization := "net.globalwebindex",
-    version := "0.03-SNAPSHOT",
+    version := appVersion,
     scalaVersion := "2.11.8",
     offline := true,
     assembleArtifact := false,
@@ -118,6 +124,31 @@ object Build extends sbt.Build {
     )
   }
 
+  def deployFileMappings(sourceDirectory: String, targetDirectory: String): List[(String, String)] = {
+    def recursively(dir: File): TreeSet[File] = {
+      val list = TreeSet(sbt.IO.listFiles(dir): _*)(implicitly[Ordering[File]].reverse) // app.jar first, then app-deps.jar because they don't change usually
+      list.filter(_.isFile) ++ list.filter(_.isDirectory).flatMap(recursively)
+    }
+    recursively(new File(sourceDirectory)).toList
+      .map(_.absolutePath)
+      .map(path => path.substring(sourceDirectory.length))
+      .map(partialPath => (sourceDirectory + partialPath, targetDirectory + partialPath))
+  }
+
+  def copyJarTo(baseImageName: String, repoName: String, appName: String, baseAppName: String) =
+    Seq(
+      docker <<= (docker dependsOn(assembly, assemblyPackageDependency)),
+      dockerfile in docker :=
+        new Dockerfile {
+          from(baseImageName)
+          deployFileMappings(workingDir.value.absolutePath, s"/opt/$baseAppName").map { case (sourcePath, targetPath) => copy(new File(sourcePath), new File(targetPath)) }
+        },
+      imageNames in docker := Seq(
+        ImageName(s"$repoName/$appName:${version.value}"),
+        ImageName(s"$repoName/$appName:latest")
+      )
+    )
+
   lazy val api = (project in file("src/api"))
     .settings(name := "mawex-api")
     .settings(publishSettings)
@@ -135,10 +166,10 @@ object Build extends sbt.Build {
 
   lazy val example = (project in file("src/example"))
     .enablePlugins(DockerPlugin)
-    .settings(name := "mawex-example")
+    .settings(name := "mawex-example-worker")
     .settings(sharedSettings)
-    .settings(assemblySettings("mawex-example", Some("example.Launcher")))
-    .settings(deploySettings("java:8", "gwiq", "mawex-example", "example.Launcher"))
+    .settings(assemblySettings("mawex-example-worker", None))
+    .settings(copyJarTo(s"gwiq/mawex:$appVersion", "gwiq", "mawex-example-worker", "mawex"))
     .dependsOn(core)
 
 }

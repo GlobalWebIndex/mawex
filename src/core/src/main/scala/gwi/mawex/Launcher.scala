@@ -1,7 +1,5 @@
 package gwi.mawex
 
-import java.net.InetAddress
-
 import akka.actor._
 import akka.cluster.client.{ClusterClient, ClusterClientSettings}
 import akka.cluster.singleton.{ClusterSingletonManager, ClusterSingletonManagerSettings}
@@ -39,15 +37,24 @@ object Service {
     str.split(",").map (_.split(":")).map( arr => Address(arr(0), arr(1).toInt) ).toList
   }
 
-  def startBackend(hostName: String, seedNodes: List[Address], taskTimeout: FiniteDuration): ActorSystem = {
+  def startBackend(hostAddress: Address, seedNodes: List[Address], taskTimeout: FiniteDuration): ActorSystem = {
     val role = "backend"
     val seedNodeAddresses = seedNodes.map { case Address(host, port) => s"akka.tcp://ClusterSystem@$host:$port" }
-    val conf =
-      ConfigFactory
-        .parseString(s"akka.cluster.roles=[$role]")
-        .withValue("akka.remote.netty.tcp.hostname", ConfigValueFactory.fromAnyRef(hostName))
-        .withValue("akka.cluster.seed-nodes", ConfigValueFactory.fromIterable(seedNodeAddresses.asJava))
-        .withFallback(ConfigFactory.load("master"))
+
+    val conf = ConfigFactory.parseString(
+      s"""
+      akka {
+        actor.provider = cluster
+        cluster.roles=[$role]
+        remote.netty.tcp {
+           hostname = ${hostAddress.host}
+           port = ${hostAddress.port}
+           bind-hostname = 0.0.0.0
+        }
+      }
+      """.stripMargin
+    ).withValue("akka.cluster.seed-nodes", ConfigValueFactory.fromIterable(seedNodeAddresses.asJava)).withFallback(ConfigFactory.load("master"))
+
     val system = ActorSystem("ClusterSystem", conf)
 
     system.actorOf(
@@ -61,11 +68,19 @@ object Service {
     system
   }
 
-  def startWorker(hostName: String, contactPoints: List[Address], consumerGroup: String, executorClazz: Class[_], executorArgs: Seq[String]): ActorSystem = {
-    val conf =
-      ConfigFactory
-        .parseString(s"akka.remote.netty.tcp.hostname=$hostName")
-        .withFallback(ConfigFactory.load("workers"))
+  def startWorker(hostAddress: Address, contactPoints: List[Address], consumerGroup: String, executorClazz: Class[_], executorArgs: Seq[String]): ActorSystem = {
+    val conf = ConfigFactory.parseString(
+      s"""
+      akka {
+        actor.provider = remote
+        remote.netty.tcp {
+           hostname = ${hostAddress.host}
+           port = ${hostAddress.port}
+           bind-hostname = 0.0.0.0
+        }
+      }
+      """.stripMargin)
+
     val system = ActorSystem("WorkerSystem", conf)
     val initialContacts =
       contactPoints
@@ -83,7 +98,7 @@ object Service {
 sealed trait Service extends Cmd { this: Command =>
   import Service._
   var seedNodes = opt[List[Address]](default = List(Address("master", 2552)), description = "12.34.56.78:2551,12.34.56.79:2552")
-  var hostName = opt[String](default = InetAddress.getLocalHost.getHostName, description = "Hostname of this node")
+  var hostAddress = arg[Address](required = true, name="host-address", description = "host:port of this node")
 }
 
 object SandBoxCmd extends Command(name = "sandbox", description = "executes arbitrary class") with Cmd {
@@ -104,7 +119,7 @@ object MasterCmd extends Command(name = "master", description = "launches master
 
   var taskTimeout = opt[Int](default = 60*60, description = "timeout for a task in seconds")
   
-  def run() = startBackend(hostName, seedNodes, taskTimeout.seconds)
+  def run() = startBackend(hostAddress, seedNodes, taskTimeout.seconds)
 
 }
 
@@ -117,7 +132,7 @@ object WorkerCmd extends Command(name = "workers", description = "launches worke
 
   def run() =
     consumerGroups.foreach { consumerGroup =>
-      startWorker(hostName, seedNodes, consumerGroup, Class.forName(executorClass), executorArgs.map(_.split(" ").filter(_.nonEmpty).toSeq).getOrElse(Seq.empty))
+      startWorker(hostAddress, seedNodes, consumerGroup, Class.forName(executorClass), executorArgs.map(_.split(" ").filter(_.nonEmpty).toSeq).getOrElse(Seq.empty))
     }
 
 }

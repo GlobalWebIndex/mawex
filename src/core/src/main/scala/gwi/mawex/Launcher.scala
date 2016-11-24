@@ -39,7 +39,7 @@ object Service {
     str.split(",").map (_.split(":")).map( arr => Address(arr(0), arr(1).toInt) ).toList
   }
 
-  def startBackend(hostName: String, seedNodes: List[Address], taskTimeout: FiniteDuration): Unit = {
+  def startBackend(hostName: String, seedNodes: List[Address], taskTimeout: FiniteDuration): ActorSystem = {
     val role = "backend"
     val seedNodeAddresses = seedNodes.map { case Address(host, port) => s"akka.tcp://ClusterSystem@$host:$port" }
     val conf =
@@ -58,9 +58,10 @@ object Service {
       ),
       "master"
     )
+    system
   }
 
-  def startWorker(hostName: String, contactPoints: List[Address], consumerGroup: String, executorClazz: Class[_], executorArgs: Seq[String]): Unit = {
+  def startWorker(hostName: String, contactPoints: List[Address], consumerGroup: String, executorClazz: Class[_], executorArgs: Seq[String]): ActorSystem = {
     val conf =
       ConfigFactory
         .parseString(s"akka.remote.netty.tcp.hostname=$hostName")
@@ -74,6 +75,7 @@ object Service {
 
     val clusterClient = system.actorOf(ClusterClient.props(ClusterClientSettings(system).withInitialContacts(initialContacts)), "clusterClient")
     system.actorOf(Worker.props(clusterClient, consumerGroup, Props(executorClazz, executorArgs)), "worker")
+    system
   }
 
 }

@@ -31,7 +31,7 @@ object Build extends sbt.Build {
 
   lazy val sharedSettings = Seq(
     organization := "net.globalwebindex",
-    version := "0.02-SNAPSHOT",
+    version := "0.03-SNAPSHOT",
     scalaVersion := "2.11.8",
     offline := true,
     assembleArtifact := false,

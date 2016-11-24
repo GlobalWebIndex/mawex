@@ -47,10 +47,11 @@ docker-compose -f docker/example-remote-client.yml up redis master workers clien
 
 ### how-to ( W.I.P. )
 
+In case you want to use mawex remotely via `RemoteMasterProxy`, you will need only API:
 ```
-"net.globalwebindex" %% "mawex-api" % "0.02-SNAPSHOT"
+"net.globalwebindex" %% "mawex-api" % "0.03-SNAPSHOT"
 ```
+Otherwise import `mawex` dependency and you can use it within your actor system programatically via `LocalMasterProxy`, see `./example`
 
-Provides you with API and `LocalMasterProxy` or `RemoteMasterProxy` actors, see `./example`
 Then all you need to do is supplying your fat Jar to a Worker which is currently done by extending docker image and copying the fat jar on classpath.
 This is going to change in future by downloading jars from a repository.

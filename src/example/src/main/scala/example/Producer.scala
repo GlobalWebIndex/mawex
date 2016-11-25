@@ -3,7 +3,7 @@ package example
 import java.util.UUID
 
 import akka.actor.{Actor, ActorLogging, ActorRef}
-import gwi.mawex.OpenProtocol._
+import gwi.mawex._
 
 import scala.concurrent.duration._
 import scala.concurrent.forkjoin.ThreadLocalRandom

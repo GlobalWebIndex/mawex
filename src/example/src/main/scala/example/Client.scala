@@ -18,7 +18,8 @@ object Client {
          |  remote.netty.tcp.port = ${hostAddress.port}
          |}
       """.stripMargin
-    )
+    ).withFallback(ConfigFactory.load("serialization"))
+
 
     implicit val system = ActorSystem("ClusterSystem", conf)
 

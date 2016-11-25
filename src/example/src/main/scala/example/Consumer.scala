@@ -2,8 +2,7 @@ package example
 
 import akka.actor.{Actor, ActorLogging}
 import akka.cluster.pubsub.{DistributedPubSub, DistributedPubSubMediator}
-import gwi.mawex.Master
-import gwi.mawex.OpenProtocol._
+import gwi.mawex._
 
 class Consumer extends Actor with ActorLogging {
 

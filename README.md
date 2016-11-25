@@ -40,6 +40,7 @@ It is based on [activator-akka-distributed-workers](https://github.com/typesafeh
 
 Mawex akka persistence is tested with redis only because it is the best fit for mawex unless
 high amount of micro tasks are being submitted to it in which case something like cassandra would be a better fit.
+It uses Kryo serialization because event log is persisted only temporarily and it would be deleted on new deploy.
 
 ```
 $ cd docker
@@ -50,7 +51,7 @@ docker-compose up
 
 In case you want to use mawex remotely via `RemoteMasterProxy`, you will need only API:
 ```
-"net.globalwebindex" %% "mawex-api" % "0.03-SNAPSHOT"
+"net.globalwebindex" %% "mawex-api" % "0.04-SNAPSHOT"
 ```
 Otherwise import `mawex` dependency and you can use it within your actor system programatically via `LocalMasterProxy`, see `./example`
 

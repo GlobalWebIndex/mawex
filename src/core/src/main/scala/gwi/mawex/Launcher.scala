@@ -4,7 +4,6 @@ import akka.actor._
 import akka.cluster.client.{ClusterClient, ClusterClientSettings}
 import akka.cluster.singleton.{ClusterSingletonManager, ClusterSingletonManagerSettings}
 import com.typesafe.config.{ConfigFactory, ConfigValueFactory}
-import gwi.mawex.OpenProtocol.e2w
 import org.backuity.clist._
 import org.backuity.clist.util.Read
 
@@ -43,9 +42,18 @@ object Service {
 
     val conf = ConfigFactory.parseString(
       s"""
+      redis {
+        host = $${REDIS_HOST}
+        port = $${REDIS_PORT}
+        password = $${REDIS_PASSWORD}
+        sentinel = false
+      }
       akka {
         actor.provider = cluster
         cluster.roles=[$role]
+        extensions = ["akka.cluster.client.ClusterClientReceptionist", "akka.cluster.pubsub.DistributedPubSub", "com.romix.akka.serialization.kryo.KryoSerializationExtension$$"]
+        akka-persistence-redis.journal.class = "com.hootsuite.akka.persistence.redis.journal.RedisJournal"
+        persistence.journal.plugin = "akka-persistence-redis.journal"
         remote.netty.tcp {
            hostname = ${hostAddress.host}
            port = ${hostAddress.port}
@@ -53,7 +61,8 @@ object Service {
         }
       }
       """.stripMargin
-    ).withValue("akka.cluster.seed-nodes", ConfigValueFactory.fromIterable(seedNodeAddresses.asJava)).withFallback(ConfigFactory.load("master"))
+    ).resolve().withValue("akka.cluster.seed-nodes", ConfigValueFactory.fromIterable(seedNodeAddresses.asJava))
+      .withFallback(ConfigFactory.load("serialization"))
 
     val system = ActorSystem("ClusterSystem", conf)
 
@@ -79,7 +88,8 @@ object Service {
            bind-hostname = 0.0.0.0
         }
       }
-      """.stripMargin)
+      """.stripMargin
+    ).withFallback(ConfigFactory.load("serialization"))
 
     val system = ActorSystem("WorkerSystem", conf)
     val initialContacts =

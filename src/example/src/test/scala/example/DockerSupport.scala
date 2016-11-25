@@ -9,7 +9,7 @@ trait DockerSupport {
 
   protected def startContainer(image: String, name: String, port: Int)(prepare: => Unit): Unit = {
     require(Process(docker(s"run --name $name -p $port:$port -d $image")).run().exitValue == 0)
-    Thread.sleep(500)
+    Thread.sleep(1000)
     prepare
   }
 

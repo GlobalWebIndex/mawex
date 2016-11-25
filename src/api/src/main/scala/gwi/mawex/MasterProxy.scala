@@ -5,7 +5,6 @@ import akka.cluster.client.ClusterClient.SendToAll
 import akka.cluster.singleton.{ClusterSingletonProxy, ClusterSingletonProxySettings}
 import akka.pattern._
 import akka.util.Timeout
-import gwi.mawex.OpenProtocol._
 
 import scala.concurrent.duration._
 

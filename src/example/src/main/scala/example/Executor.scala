@@ -1,7 +1,7 @@
 package example
 
 import akka.actor.{Actor, ActorLogging}
-import gwi.mawex.OpenProtocol.e2w
+import gwi.mawex._
 import gwi.mawex.Service.Address
 
 import scala.util.Success

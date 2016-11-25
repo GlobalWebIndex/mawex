@@ -9,39 +9,49 @@ import akka.cluster.pubsub.DistributedPubSubMediator.{CurrentTopics, GetTopics, 
 import akka.cluster.singleton.{ClusterSingletonManager, ClusterSingletonManagerSettings}
 import akka.testkit.{ImplicitSender, TestKit, TestProbe}
 import com.typesafe.config.ConfigFactory
-import gwi.mawex.OpenProtocol._
 import gwi.mawex._
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import redis.RedisClient
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
-import scala.util.{Random, Success}
+import scala.util.{Failure, Random, Success, Try}
 
 object MawexSpec {
 
   val clusterConfig = ConfigFactory.parseString(s"""
-    akka {
-      actor.provider = cluster
-      remote.netty.tcp.port=0
-      cluster.metrics.enabled=off
-      actor.serializers.proto = "akka.remote.serialization.ProtobufSerializer"
-      akka-persistence-redis.journal.class = "com.hootsuite.akka.persistence.redis.journal.RedisJournal"
-      persistence.journal.plugin = "akka-persistence-redis.journal"
-    }
     redis {
       host = localhost
       port = 6379
       sentinel = false
     }
-    """.stripMargin)
+    akka {
+      actor.provider = cluster
+      extensions = ["akka.cluster.client.ClusterClientReceptionist", "akka.cluster.pubsub.DistributedPubSub", "com.romix.akka.serialization.kryo.KryoSerializationExtension$$"]
+      akka-persistence-redis.journal.class = "com.hootsuite.akka.persistence.redis.journal.RedisJournal"
+      persistence.journal.plugin = "akka-persistence-redis.journal"
+      remote.netty.tcp.port=0
+      cluster.metrics.enabled=off
+    }
+    """.stripMargin
+  ).withFallback(ConfigFactory.load("serialization"))
 
   val workerConfig = ConfigFactory.parseString("""
     akka {
       actor.provider = remote
       remote.netty.tcp.port=0
     }
-    """.stripMargin)
+    """.stripMargin
+  ).withFallback(ConfigFactory.load("serialization"))
+
+  import scala.language.implicitConversions
+  implicit def eitherToTry[B](either: Either[String, B]): Try[B] = {
+    either match {
+      case Right(obj) => Success(obj)
+      case Left(err) => Failure(new RuntimeException(err))
+
+    }
+  }
 
   class FlakyWorkExecutor extends Actor {
     var i = 0

@@ -5,12 +5,9 @@ import akka.cluster.Cluster
 import akka.cluster.client.ClusterClientReceptionist
 import akka.cluster.pubsub.{DistributedPubSub, DistributedPubSubMediator}
 import akka.persistence.PersistentActor
-import gwi.mawex.InternalProtocol._
-import gwi.mawex.OpenProtocol._
 import gwi.mawex.State._
 
 import scala.concurrent.duration.{Deadline, FiniteDuration}
-import scala.util.{Failure, Success}
 
 class Master(workTimeout: FiniteDuration) extends PersistentActor with ActorLogging {
   import Master._
@@ -75,7 +72,7 @@ class Master(workTimeout: FiniteDuration) extends PersistentActor with ActorLogg
           }
         }
 
-    case w2m.TaskFinished(workerId, taskId, r@Success(result)) =>
+    case w2m.TaskFinished(workerId, taskId, r@Right(result)) =>
       if (workState.isDone(taskId)) { // idempotent
         log.warning("Previous Ack was lost, confirm again that work is done")
         sender() ! m2w.TaskChecked(taskId)
@@ -94,12 +91,12 @@ class Master(workTimeout: FiniteDuration) extends PersistentActor with ActorLogg
         }
       }
 
-    case w2m.TaskFinished(workerId, taskId, r@Failure(ex)) =>
+    case w2m.TaskFinished(workerId, taskId, r@Left(error)) =>
       workState.getTaskInProgress(taskId) match {
         case None =>
           log.warning("Task {} is supposed to be in progress by worker {}", taskId, workerId)
         case Some(finishedTask) =>
-          log.warning("Task {} hasn't finished because of worker {} crash {}", taskId, workerId, ex.getMessage)
+          log.warning("Task {} hasn't finished because of worker {} crash {}", taskId, workerId, error)
           changeWorkerToIdle(workerId, taskId)
           persist(WorkerFailed(taskId)) { event =>
             workState = workState.updated(event)

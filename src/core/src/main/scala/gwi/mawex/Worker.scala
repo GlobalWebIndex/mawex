@@ -5,13 +5,12 @@ import java.util.UUID
 import akka.actor.SupervisorStrategy.{Restart, Stop}
 import akka.actor._
 import akka.cluster.client.ClusterClient.SendToAll
-import gwi.mawex.InternalProtocol._
-import gwi.mawex.OpenProtocol._
 
 import scala.concurrent.duration._
-import scala.util.{Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 class Worker(clusterClient: ActorRef, consumerGroup: String, workExecutorProps: Props, registerInterval: FiniteDuration) extends Actor with ActorLogging {
+  import Worker._
 
   val workerId = WorkerId(UUID.randomUUID().toString, consumerGroup)
 
@@ -31,7 +30,7 @@ class Worker(clusterClient: ActorRef, consumerGroup: String, workExecutorProps: 
     case _: DeathPactException           => Stop
     case ex: Exception =>
       log.error(ex, "Executor crashed !!!")
-      currentTaskId foreach { taskId => sendToMaster(w2m.TaskFinished(workerId, taskId, Failure(ex))) }
+      currentTaskId foreach { taskId => sendToMaster(w2m.TaskFinished(workerId, taskId, Left(ex.getMessage))) }
       context.become(idle)
       Restart
   }
@@ -85,6 +84,14 @@ class Worker(clusterClient: ActorRef, consumerGroup: String, workExecutorProps: 
 }
 
 object Worker {
+  import scala.language.implicitConversions
+
+  implicit def tryToEither[A](obj: Try[A]): Either[String, A] = {
+    obj match {
+      case Success(something) => Right(something)
+      case Failure(err) => Left(err.getMessage)
+    }
+  }
 
   def props(clusterClient: ActorRef, consumerGroup: String, executorProps: Props, registerInterval: FiniteDuration = 10.seconds): Props =
     Props(classOf[Worker], clusterClient, consumerGroup, executorProps, registerInterval)

@@ -1,7 +1,5 @@
 package gwi.mawex
 
-import gwi.mawex.OpenProtocol.{Task, TaskId}
-
 import scala.collection.immutable.Queue
 
 object State {

@@ -23,9 +23,9 @@ object MawexSpec {
   val clusterConfig = ConfigFactory.parseString(s"""
     akka {
       actor.provider = cluster
-      actor.warn-about-java-serializer-usage = false
       remote.netty.tcp.port=0
       cluster.metrics.enabled=off
+      actor.serializers.proto = "akka.remote.serialization.ProtobufSerializer"
       akka-persistence-redis.journal.class = "com.hootsuite.akka.persistence.redis.journal.RedisJournal"
       persistence.journal.plugin = "akka-persistence-redis.journal"
     }
@@ -39,7 +39,6 @@ object MawexSpec {
   val workerConfig = ConfigFactory.parseString("""
     akka {
       actor.provider = remote
-      actor.warn-about-java-serializer-usage = false
       remote.netty.tcp.port=0
     }
     """.stripMargin)
@@ -113,7 +112,7 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
     val initialContacts = Set(RootActorPath(backendClusterAddress) / "system" / "receptionist")
     val clusterWorkerClient = workerSystem.actorOf(ClusterClient.props(ClusterClientSettings(workerSystem).withInitialContacts(initialContacts)), "clusterWorkerClient")
     for (n <- 1 to 3)
-      workerSystem.actorOf(Worker.props(clusterWorkerClient, ConsumerGroup, Props(classOf[Executor], Seq.empty), 1.second), "worker-" + n)
+      workerSystem.actorOf(Worker.props(clusterWorkerClient, ConsumerGroup, Props(classOf[IdentityExecutor], Seq.empty), 1.second), "worker-" + n)
     workerSystem.actorOf(Worker.props(clusterWorkerClient, ConsumerGroup, Props[FlakyWorkExecutor], 1.second), "flaky-worker")
 
     Cluster(system).join(backendClusterAddress)
@@ -166,7 +165,7 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
 
     // consumer groups
     for (n <- 4 to 10)
-      workerSystem.actorOf(Worker.props(clusterWorkerClient, n.toString, Props(classOf[Executor], Seq.empty), 1.second), "worker-" + n)
+      workerSystem.actorOf(Worker.props(clusterWorkerClient, n.toString, Props(classOf[IdentityExecutor], Seq.empty), 1.second), "worker-" + n)
     for (n <- 201 to 300) {
       val taskId = TaskId(n.toString, Random.shuffle(4 to 10).head.toString)
       masterProxy ! Task(taskId, n)

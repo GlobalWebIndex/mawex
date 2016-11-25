@@ -27,6 +27,7 @@ object MawexSpec {
     }
     akka {
       actor.provider = cluster
+      actor.kryo.idstrategy = automatic
       extensions = ["akka.cluster.client.ClusterClientReceptionist", "akka.cluster.pubsub.DistributedPubSub", "com.romix.akka.serialization.kryo.KryoSerializationExtension$$"]
       akka-persistence-redis.journal.class = "com.hootsuite.akka.persistence.redis.journal.RedisJournal"
       persistence.journal.plugin = "akka-persistence-redis.journal"
@@ -34,15 +35,16 @@ object MawexSpec {
       cluster.metrics.enabled=off
     }
     """.stripMargin
-  ).withFallback(ConfigFactory.load("serialization"))
+  ).withFallback(ConfigFactory.load())
 
   val workerConfig = ConfigFactory.parseString("""
     akka {
       actor.provider = remote
+      actor.kryo.idstrategy = automatic
       remote.netty.tcp.port=0
     }
     """.stripMargin
-  ).withFallback(ConfigFactory.load("serialization"))
+  ).withFallback(ConfigFactory.load())
 
   import scala.language.implicitConversions
   implicit def eitherToTry[B](either: Either[String, B]): Try[B] = {

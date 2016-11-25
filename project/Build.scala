@@ -171,6 +171,6 @@ object Build extends sbt.Build {
     .settings(sharedSettings)
     .settings(assemblySettings("mawex-example-worker", None))
     .settings(copyJarTo(s"gwiq/mawex:$appVersion", "gwiq", "mawex-example-worker", "mawex"))
-    .dependsOn(core)
+    .dependsOn(core % "compile->compile")
 
 }

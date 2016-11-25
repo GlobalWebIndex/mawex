@@ -14,11 +14,12 @@ object Client {
       s"""
          |akka {
          |  actor.provider = cluster
+         |  actor.kryo.idstrategy = automatic
          |  remote.netty.tcp.hostname = ${hostAddress.host}
          |  remote.netty.tcp.port = ${hostAddress.port}
          |}
       """.stripMargin
-    ).withFallback(ConfigFactory.load("serialization"))
+    ).withFallback(ConfigFactory.load())
 
 
     implicit val system = ActorSystem("ClusterSystem", conf)

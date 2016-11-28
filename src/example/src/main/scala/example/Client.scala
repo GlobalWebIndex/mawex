@@ -12,12 +12,14 @@ object Client {
   def startRemoteClient(hostAddress: Address, seedNodes: List[Address]): Unit = {
     val conf = ConfigFactory.parseString(
       s"""
-         |akka {
-         |  actor.provider = cluster
-         |  actor.kryo.idstrategy = automatic
-         |  remote.netty.tcp.hostname = ${hostAddress.host}
-         |  remote.netty.tcp.port = ${hostAddress.port}
-         |}
+      akka {
+        actor {
+          provider = cluster
+          kryo.idstrategy = automatic
+        }
+        remote.netty.tcp.hostname = ${hostAddress.host}
+        remote.netty.tcp.port = ${hostAddress.port}
+      }
       """.stripMargin
     ).withFallback(ConfigFactory.load())
 

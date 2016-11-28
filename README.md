@@ -51,7 +51,7 @@ docker-compose up
 
 In case you want to use mawex remotely via `RemoteMasterProxy`, you will need only API:
 ```
-"net.globalwebindex" %% "mawex-api" % "0.04-SNAPSHOT"
+"net.globalwebindex" %% "mawex-api" % "0.05-SNAPSHOT"
 ```
 Otherwise import `mawex` dependency and you can use it within your actor system programatically via `LocalMasterProxy`, see `./example`
 

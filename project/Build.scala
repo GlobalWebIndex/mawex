@@ -12,9 +12,9 @@ import scala.collection.immutable.TreeSet
 
 object Build extends sbt.Build {
 
-  lazy val appVersion = "0.04-SNAPSHOT"
+  lazy val appVersion = "0.05-SNAPSHOT"
 
-  lazy val akkaVersion = "2.4.11"
+  lazy val akkaVersion = "2.4.14"
 
   lazy val testSettings = Seq(
     testOptions in Test += Tests.Argument("-oDFI"),

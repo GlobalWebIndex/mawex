@@ -49,8 +49,10 @@ object Service {
         sentinel = false
       }
       akka {
-        actor.provider = cluster
-        actor.kryo.idstrategy = automatic
+        actor {
+          provider = cluster
+          kryo.idstrategy = automatic
+        }
         cluster.roles=[$role]
         extensions = ["akka.cluster.client.ClusterClientReceptionist", "akka.cluster.pubsub.DistributedPubSub", "com.romix.akka.serialization.kryo.KryoSerializationExtension$$"]
         akka-persistence-redis.journal.class = "com.hootsuite.akka.persistence.redis.journal.RedisJournal"
@@ -82,8 +84,11 @@ object Service {
     val conf = ConfigFactory.parseString(
       s"""
       akka {
-        actor.provider = remote
-        actor.kryo.idstrategy = automatic
+        actor {
+          provider = remote
+          kryo.idstrategy = automatic
+          extensions = ["com.romix.akka.serialization.kryo.KryoSerializationExtension$$"]
+        }
         remote.netty.tcp {
            hostname = ${hostAddress.host}
            port = ${hostAddress.port}

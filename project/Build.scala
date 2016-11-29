@@ -12,7 +12,7 @@ import scala.collection.immutable.TreeSet
 
 object Build extends sbt.Build {
 
-  lazy val appVersion = "0.06-SNAPSHOT"
+  lazy val appVersion = "0.07-SNAPSHOT"
 
   lazy val akkaVersion = "2.4.14"
 

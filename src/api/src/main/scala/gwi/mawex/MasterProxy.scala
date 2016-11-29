@@ -1,7 +1,8 @@
 package gwi.mawex
 
-import akka.actor.{Actor, ActorLogging, ActorRef, Props}
+import akka.actor.{Actor, ActorLogging, ActorPath, ActorRef, Props}
 import akka.cluster.client.ClusterClient.SendToAll
+import akka.cluster.client.{ClusterClient, ClusterClientSettings}
 import akka.cluster.singleton.{ClusterSingletonProxy, ClusterSingletonProxySettings}
 import akka.pattern._
 import akka.util.Timeout
@@ -27,11 +28,13 @@ class LocalMasterProxy extends Actor {
 
 }
 
-class RemoteMasterProxy(clusterClient: ActorRef) extends Actor with ActorLogging {
+class RemoteMasterProxy(initialContacts: Set[ActorPath]) extends Actor with ActorLogging {
   import RemoteMasterProxy._
   import context.dispatcher
 
   var senderByTaskId = Map.empty[TaskId, ActorRef]
+
+  val clusterClient = context.system.actorOf(ClusterClient.props(ClusterClientSettings(context.system).withInitialContacts(initialContacts)), "cluster-client")
 
   def receive = {
     case CheckForZombieTask(taskId) =>
@@ -58,5 +61,5 @@ class RemoteMasterProxy(clusterClient: ActorRef) extends Actor with ActorLogging
 
 object RemoteMasterProxy {
   case class CheckForZombieTask(id: TaskId)
-  def props(clusterClient: ActorRef) = Props(classOf[RemoteMasterProxy], clusterClient)
+  def props(initialContacts: Set[ActorPath]) = Props(classOf[RemoteMasterProxy], initialContacts)
 }

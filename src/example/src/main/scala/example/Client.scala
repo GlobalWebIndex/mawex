@@ -2,7 +2,6 @@ package example
 
 import akka.actor.{ActorSystem, AddressFromURIString, Props, RootActorPath}
 import akka.cluster.Cluster
-import akka.cluster.client.{ClusterClient, ClusterClientSettings}
 import com.typesafe.config.ConfigFactory
 import gwi.mawex.RemoteMasterProxy
 import gwi.mawex.Service.Address
@@ -31,8 +30,7 @@ object Client {
 
     Cluster(system).joinSeedNodes(seedNodeAddresses)
 
-    val clusterClient = system.actorOf(ClusterClient.props(ClusterClientSettings(system).withInitialContacts(initialContacts)), "clusterClient")
-    val masterProxy = system.actorOf(RemoteMasterProxy.props(clusterClient), "masterProxy")
+    val masterProxy = system.actorOf(RemoteMasterProxy.props(initialContacts), "masterProxy")
     system.actorOf(Props(classOf[Producer], masterProxy), "producer")
     system.actorOf(Props[Consumer], "consumer")
   }

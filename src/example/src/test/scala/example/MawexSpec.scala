@@ -130,8 +130,7 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
     Cluster(system).join(backendClusterAddress)
     clusterProbe.expectMsgType[MemberUp]
 
-    val clusterClient = system.actorOf(ClusterClient.props(ClusterClientSettings(system).withInitialContacts(initialContacts)), "clusterClient")
-    val masterProxy = system.actorOf(Props(classOf[RemoteMasterProxy], clusterClient), "remoteMasterProxy")
+    val masterProxy = system.actorOf(Props(classOf[RemoteMasterProxy], initialContacts), "remoteMasterProxy")
 
     clusterWorkerClient -> masterProxy
   }

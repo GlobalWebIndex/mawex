@@ -1,14 +1,14 @@
 package example
 
-import akka.actor.{Actor, ActorSystem, PoisonPill, Props, RootActorPath}
+import akka.actor.{Actor, ActorSystem, Props, RootActorPath}
 import akka.cluster.Cluster
 import akka.cluster.ClusterEvent.{CurrentClusterState, MemberUp}
 import akka.cluster.client.{ClusterClient, ClusterClientSettings}
 import akka.cluster.pubsub.DistributedPubSub
 import akka.cluster.pubsub.DistributedPubSubMediator.{CurrentTopics, GetTopics, Subscribe, SubscribeAck}
-import akka.cluster.singleton.{ClusterSingletonManager, ClusterSingletonManagerSettings}
 import akka.testkit.{ImplicitSender, TestKit, TestProbe}
 import com.typesafe.config.ConfigFactory
+import gwi.mawex.Service.Address
 import gwi.mawex._
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import redis.RedisClient
@@ -19,28 +19,12 @@ import scala.util.{Failure, Random, Success, Try}
 
 object MawexSpec {
 
-  val clusterConfig = ConfigFactory.parseString(s"""
-    redis {
-      host = localhost
-      port = 6379
-      sentinel = false
-    }
-    akka {
-      actor.provider = cluster
-      actor.kryo.idstrategy = automatic
-      extensions = ["akka.cluster.client.ClusterClientReceptionist", "akka.cluster.pubsub.DistributedPubSub", "com.romix.akka.serialization.kryo.KryoSerializationExtension$$"]
-      akka-persistence-redis.journal.class = "com.hootsuite.akka.persistence.redis.journal.RedisJournal"
-      persistence.journal.plugin = "akka-persistence-redis.journal"
-      remote.netty.tcp.port=0
-      cluster.metrics.enabled=off
-    }
-    """.stripMargin
-  ).withFallback(ConfigFactory.load())
-
   val workerConfig = ConfigFactory.parseString("""
     akka {
-      actor.provider = remote
-      actor.kryo.idstrategy = automatic
+      actor{
+         provider = remote
+         kryo.idstrategy = automatic
+      }
       remote.netty.tcp.port=0
     }
     """.stripMargin
@@ -81,9 +65,9 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
 
   val workTimeout = 3.seconds
 
-  def this() = this(ActorSystem("DistributedWorkerSpec", MawexSpec.clusterConfig))
-  val backendSystem = ActorSystem("DistributedWorkerSpec", ConfigFactory.parseString("akka.cluster.roles=[backend]").withFallback(clusterConfig))
-  val workerSystem = ActorSystem("DistributedWorkerSpec", workerConfig)
+  def this() = this(ActorSystem("ClusterSystem", ConfigFactory.parseString("akka.actor.provider=cluster").withFallback(ConfigFactory.load())))
+  val backendSystem = Service.startBackend(Address("localhost", 6379), "foo", Address("localhost", 0), List.empty, 1.second, 1)
+  val workerSystem = ActorSystem("ClusterSystem", workerConfig)
 
   val ConsumerGroup = "default"
 
@@ -112,14 +96,6 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
     clusterProbe.expectMsgType[CurrentClusterState]
     Cluster(backendSystem).join(backendClusterAddress)
     clusterProbe.expectMsgType[MemberUp]
-
-    backendSystem.actorOf(
-      ClusterSingletonManager.props(
-        Master(workTimeout),
-        PoisonPill,
-        ClusterSingletonManagerSettings(system).withRole("backend")),
-      "master")
-
 
     val initialContacts = Set(RootActorPath(backendClusterAddress) / "system" / "receptionist")
     val clusterWorkerClient = workerSystem.actorOf(ClusterClient.props(ClusterClientSettings(workerSystem).withInitialContacts(initialContacts)), "clusterWorkerClient")

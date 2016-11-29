@@ -36,16 +36,16 @@ object Service {
     str.split(",").map (_.split(":")).map( arr => Address(arr(0), arr(1).toInt) ).toList
   }
 
-  def startBackend(hostAddress: Address, seedNodes: List[Address], taskTimeout: FiniteDuration): ActorSystem = {
+  def startBackend(redisAddress: Address, redisPassword: String, hostAddress: Address, seedNodes: List[Address], taskTimeout: FiniteDuration, memberSize: Int): ActorSystem = {
     val role = "backend"
     val seedNodeAddresses = seedNodes.map { case Address(host, port) => s"akka.tcp://ClusterSystem@$host:$port" }
 
     val conf = ConfigFactory.parseString(
       s"""
       redis {
-        host = $${REDIS_HOST}
-        port = $${REDIS_PORT}
-        password = $${REDIS_PASSWORD}
+        host = ${redisAddress.host}
+        port = ${redisAddress.port}
+        password = $redisPassword
         sentinel = false
       }
       akka {
@@ -53,7 +53,10 @@ object Service {
           provider = cluster
           kryo.idstrategy = automatic
         }
-        cluster.roles=[$role]
+        cluster {
+          roles = [$role]
+          min-nr-of-members = $memberSize
+        }
         extensions = ["akka.cluster.client.ClusterClientReceptionist", "akka.cluster.pubsub.DistributedPubSub", "com.romix.akka.serialization.kryo.KryoSerializationExtension$$"]
         akka-persistence-redis.journal.class = "com.hootsuite.akka.persistence.redis.journal.RedisJournal"
         persistence.journal.plugin = "akka-persistence-redis.journal"
@@ -135,8 +138,12 @@ object MasterCmd extends Command(name = "master", description = "launches master
   import Service._
 
   var taskTimeout = opt[Int](default = 60*60, description = "timeout for a task in seconds")
+  var redisAddress = arg[Address](required = true, name="redis-address", description = "host:port of redis")
   
-  def run() = startBackend(hostAddress, seedNodes, taskTimeout.seconds)
+  def run() = {
+    val redisPassword = sys.env.getOrElse("REDIS_PASSWORD", throw new IllegalArgumentException("REDIS_PASSWORD env var must defined !!!"))
+    startBackend(redisAddress, redisPassword, hostAddress, seedNodes, taskTimeout.seconds, seedNodes.size)
+  }
 
 }
 

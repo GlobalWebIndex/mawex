@@ -13,5 +13,5 @@ object w2m {
 /** Master => Workers */
 object m2w {
   case object TaskReady extends MasterWorkerLike
-  case class TaskChecked(taskId: TaskId) extends MasterWorkerLike
+  case class TaskResultChecked(taskId: TaskId) extends MasterWorkerLike
 }

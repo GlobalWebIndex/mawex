@@ -62,7 +62,7 @@ class Worker(clusterClient: ActorRef, consumerGroup: String, workExecutorProps: 
   }
 
   def waitForWorkIsDoneAck(result: Try[Any]): Receive = {
-    case m2w.TaskChecked(id) if id == taskId =>
+    case m2w.TaskResultChecked(id) if id == taskId =>
       sendToMaster(w2m.TaskRequest(workerId))
       context.setReceiveTimeout(Duration.Undefined)
       context.become(idle)

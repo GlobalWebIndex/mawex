@@ -73,9 +73,9 @@ class Master(workTimeout: FiniteDuration) extends PersistentActor with ActorLogg
         }
 
     case w2m.TaskFinished(workerId, taskId, r@Right(result)) =>
+      sender() ! m2w.TaskResultChecked(taskId)
       if (workState.isDone(taskId)) { // idempotent
         log.warning("Previous Ack was lost, confirm again that work is done")
-        sender() ! m2w.TaskChecked(taskId)
       } else {
         workState.getTaskInProgress(taskId) match {
           case None =>
@@ -86,12 +86,12 @@ class Master(workTimeout: FiniteDuration) extends PersistentActor with ActorLogg
             persist(TaskCompleted(taskId, result)) { event =>
               workState = workState.updated(event)
               mediator ! DistributedPubSubMediator.Publish(ResultsTopic, TaskResult(finishedTask, r))
-              sender ! m2w.TaskChecked(taskId) // Ack back to original sender
             }
         }
       }
 
     case w2m.TaskFinished(workerId, taskId, r@Left(error)) =>
+      sender() ! m2w.TaskResultChecked(taskId)
       workState.getTaskInProgress(taskId) match {
         case None =>
           log.warning("Task {} is supposed to be in progress by worker {}", taskId, workerId)

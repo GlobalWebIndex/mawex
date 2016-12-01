@@ -68,7 +68,7 @@ object Service {
       }
       """.stripMargin
     ).resolve().withValue("akka.cluster.seed-nodes", ConfigValueFactory.fromIterable(seedNodeAddresses.asJava))
-      .withFallback(ConfigFactory.load())
+      .withFallback(ConfigFactory.load("serialization")).withFallback(ConfigFactory.load())
 
     val system = ActorSystem("ClusterSystem", conf)
 
@@ -99,7 +99,7 @@ object Service {
         }
       }
       """.stripMargin
-    ).withFallback(ConfigFactory.load())
+    ).withFallback(ConfigFactory.load("serialization")).withFallback(ConfigFactory.load())
 
     val system = ActorSystem("WorkerSystem", conf)
     val initialContacts =

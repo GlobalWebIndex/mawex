@@ -28,7 +28,7 @@ object MawexSpec {
       remote.netty.tcp.port=0
     }
     """.stripMargin
-  ).withFallback(ConfigFactory.load())
+  ).withFallback(ConfigFactory.load("serialization"))
 
   import scala.language.implicitConversions
   implicit def eitherToTry[B](either: Either[String, B]): Try[B] = {
@@ -65,7 +65,7 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
 
   val workTimeout = 3.seconds
 
-  def this() = this(ActorSystem("ClusterSystem", ConfigFactory.parseString("akka.actor.provider=cluster").withFallback(ConfigFactory.load())))
+  def this() = this(ActorSystem("ClusterSystem", ConfigFactory.parseString("akka.actor.provider=cluster").withFallback(ConfigFactory.load("serialization"))))
   val backendSystem = Service.startBackend(Address("localhost", 6379), "foo", Address("localhost", 0), List.empty, 1.second, 1)
   val workerSystem = ActorSystem("ClusterSystem", workerConfig)
 

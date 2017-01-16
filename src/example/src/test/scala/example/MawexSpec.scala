@@ -66,7 +66,8 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
   val workTimeout = 3.seconds
 
   def this() = this(ActorSystem("ClusterSystem", ConfigFactory.parseString("akka.actor.provider=cluster").withFallback(ConfigFactory.load("serialization"))))
-  val backendSystem = Service.startBackend(Address("localhost", 6379), "foo", Address("localhost", 0), List.empty, 1.second, 1)
+  val backendSystem =  Service.buildClusterSystem(Address("localhost", 6379), "foo", Address("localhost", 0), List.empty, 1)
+  Service.backendSingletonActorRef(1.second, backendSystem)()
   val workerSystem = ActorSystem("ClusterSystem", workerConfig)
 
   val ConsumerGroup = "default"

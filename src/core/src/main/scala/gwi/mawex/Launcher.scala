@@ -36,81 +36,93 @@ object Service {
     str.split(",").map (_.split(":")).map( arr => Address(arr(0), arr(1).toInt) ).toList
   }
 
-  def startBackend(redisAddress: Address, redisPassword: String, hostAddress: Address, seedNodes: List[Address], taskTimeout: FiniteDuration, memberSize: Int): ActorSystem = {
-    val role = "backend"
-    val seedNodeAddresses = seedNodes.map { case Address(host, port) => s"akka.tcp://ClusterSystem@$host:$port" }
+  def buildClusterSystem(redisAddress: Address, redisPassword: String, hostAddress: Address, seedNodes: List[Address], memberSize: Int) =
+    ActorSystem(
+      "ClusterSystem",
+      ConfigFactory.parseString(
+        s"""
+          redis {
+            host = ${redisAddress.host}
+            port = ${redisAddress.port}
+            password = $redisPassword
+            sentinel = false
+          }
+          akka {
+            actor {
+              provider = cluster
+              kryo.idstrategy = automatic
+            }
+            cluster {
+              downing-provider-class = "tanukki.akka.cluster.autodown.OldestAutoDowning"
+              roles = [backend]
+              min-nr-of-members = $memberSize
+            }
+            extensions = ["akka.cluster.client.ClusterClientReceptionist", "akka.cluster.pubsub.DistributedPubSub", "com.romix.akka.serialization.kryo.KryoSerializationExtension$$"]
+            akka-persistence-redis.journal.class = "com.hootsuite.akka.persistence.redis.journal.RedisJournal"
+            persistence.journal.plugin = "akka-persistence-redis.journal"
+            remote.netty.tcp {
+               hostname = ${hostAddress.host}
+               port = ${hostAddress.port}
+               bind-hostname = 0.0.0.0
+            }
+          }
+          custom-downing {
+            stable-after = 20s
+            shutdown-actor-system-on-resolution = true
+            oldest-auto-downing {
+              oldest-member-role = "backend"
+              down-if-alone = true
+            }
+          }
+          """.stripMargin
+      ).resolve()
+        .withValue("akka.cluster.seed-nodes", ConfigValueFactory.fromIterable(seedNodes.map { case Address(host, port) => s"akka.tcp://ClusterSystem@$host:$port" }.asJava))
+        .withFallback(ConfigFactory.load("serialization"))
+        .withFallback(ConfigFactory.load())
+    )
 
-    val conf = ConfigFactory.parseString(
-      s"""
-      redis {
-        host = ${redisAddress.host}
-        port = ${redisAddress.port}
-        password = $redisPassword
-        sentinel = false
-      }
-      akka {
-        actor {
-          provider = cluster
-          kryo.idstrategy = automatic
-        }
-        cluster {
-          roles = [$role]
-          min-nr-of-members = $memberSize
-        }
-        extensions = ["akka.cluster.client.ClusterClientReceptionist", "akka.cluster.pubsub.DistributedPubSub", "com.romix.akka.serialization.kryo.KryoSerializationExtension$$"]
-        akka-persistence-redis.journal.class = "com.hootsuite.akka.persistence.redis.journal.RedisJournal"
-        persistence.journal.plugin = "akka-persistence-redis.journal"
-        remote.netty.tcp {
-           hostname = ${hostAddress.host}
-           port = ${hostAddress.port}
-           bind-hostname = 0.0.0.0
-        }
-      }
-      """.stripMargin
-    ).resolve().withValue("akka.cluster.seed-nodes", ConfigValueFactory.fromIterable(seedNodeAddresses.asJava))
-      .withFallback(ConfigFactory.load("serialization")).withFallback(ConfigFactory.load())
-
-    val system = ActorSystem("ClusterSystem", conf)
-
-    system.actorOf(
+  def backendSingletonActorRef(taskTimeout: FiniteDuration, system: ActorSystem)(arf: ActorRefFactory = system): ActorRef = {
+    arf.actorOf(
       ClusterSingletonManager.props(
         Master(taskTimeout),
         PoisonPill,
-        ClusterSingletonManagerSettings(system).withRole(role)
+        ClusterSingletonManagerSettings(system).withRole("backend")
       ),
       "master"
     )
-    system
   }
 
-  def startWorker(hostAddress: Address, contactPoints: List[Address], consumerGroup: String, executorClazz: Class[_], executorArgs: Seq[String]): ActorSystem = {
-    val conf = ConfigFactory.parseString(
-      s"""
-      akka {
-        actor {
-          provider = remote
-          kryo.idstrategy = automatic
-          extensions = ["com.romix.akka.serialization.kryo.KryoSerializationExtension$$"]
+  def buildWorkerSystem(hostAddress: Address) =
+    ActorSystem(
+      "WorkerSystem",
+      ConfigFactory.parseString(
+        s"""
+        akka {
+          actor {
+            provider = remote
+            kryo.idstrategy = automatic
+            extensions = ["com.romix.akka.serialization.kryo.KryoSerializationExtension$$"]
+          }
+          remote.netty.tcp {
+             hostname = ${hostAddress.host}
+             port = ${hostAddress.port}
+             bind-hostname = 0.0.0.0
+          }
         }
-        remote.netty.tcp {
-           hostname = ${hostAddress.host}
-           port = ${hostAddress.port}
-           bind-hostname = 0.0.0.0
-        }
-      }
-      """.stripMargin
-    ).withFallback(ConfigFactory.load("serialization")).withFallback(ConfigFactory.load())
+        """.stripMargin
+      ).withFallback(ConfigFactory.load("serialization"))
+        .withFallback(ConfigFactory.load())
+    )
 
-    val system = ActorSystem("WorkerSystem", conf)
+  def workerActorRef(contactPoints: List[Address], consumerGroup: String, executorClazz: Class[_], executorArgs: Seq[String], system: ActorSystem)(arf: ActorRefFactory = system): ActorRef = {
     val initialContacts =
       contactPoints
         .map { case Address(host, port) => s"akka.tcp://ClusterSystem@$host:$port" }
         .map { case AddressFromURIString(addr) => RootActorPath(addr) / "system" / "receptionist" }
         .toSet
 
-    val clusterClient = system.actorOf(ClusterClient.props(ClusterClientSettings(system).withInitialContacts(initialContacts)), "clusterClient")
-    system.actorOf(Worker.props(clusterClient, consumerGroup, Props(executorClazz, executorArgs)), "worker")
-    system
+    val clusterClient = arf.actorOf(ClusterClient.props(ClusterClientSettings(system).withInitialContacts(initialContacts)), "clusterClient")
+    arf.actorOf(Worker.props(clusterClient, consumerGroup, Props(executorClazz, executorArgs)), "worker")
   }
 
 }
@@ -139,10 +151,11 @@ object MasterCmd extends Command(name = "master", description = "launches master
 
   var taskTimeout = opt[Int](default = 60*60, description = "timeout for a task in seconds")
   var redisAddress = arg[Address](required = true, name="redis-address", description = "host:port of redis")
-  
+
   def run() = {
     val redisPassword = sys.env.getOrElse("REDIS_PASSWORD", throw new IllegalArgumentException("REDIS_PASSWORD env var must defined !!!"))
-    startBackend(redisAddress, redisPassword, hostAddress, seedNodes, taskTimeout.seconds, seedNodes.size)
+    val system = buildClusterSystem(redisAddress, redisPassword, hostAddress, seedNodes, seedNodes.size)
+    backendSingletonActorRef(taskTimeout.seconds, system)()
   }
 
 }
@@ -156,7 +169,8 @@ object WorkerCmd extends Command(name = "workers", description = "launches worke
 
   def run() =
     consumerGroups.foreach { consumerGroup =>
-      startWorker(hostAddress, seedNodes, consumerGroup, Class.forName(executorClass), executorArgs.map(_.split(" ").filter(_.nonEmpty).toSeq).getOrElse(Seq.empty))
+      val system = buildWorkerSystem(hostAddress)
+      workerActorRef(seedNodes, consumerGroup, Class.forName(executorClass), executorArgs.map(_.split(" ").filter(_.nonEmpty).toSeq).getOrElse(Seq.empty), system)()
     }
 
 }

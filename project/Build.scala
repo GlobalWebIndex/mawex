@@ -12,7 +12,7 @@ import scala.collection.immutable.TreeSet
 
 object Build extends sbt.Build {
 
-  lazy val appVersion = "0.10-SNAPSHOT"
+  lazy val appVersion = "0.13-SNAPSHOT"
 
   lazy val akkaVersion = "2.4.14"
 
@@ -25,6 +25,7 @@ object Build extends sbt.Build {
   lazy val libraryDeps = Seq(
     "org.backuity.clist"          %%  "clist-core"                  % "3.2.2",
     "org.backuity.clist"          %%  "clist-macros"                % "3.2.2"       % "provided",
+    "com.github.TanUkkii007"      %%  "akka-cluster-custom-downing" % "0.0.7",
     "com.typesafe.akka"           %%  "akka-remote"                 % akkaVersion,
     "com.typesafe.akka"           %%  "akka-cluster"                % akkaVersion,
     "com.typesafe.akka"           %%  "akka-cluster-tools"          % akkaVersion,
@@ -52,6 +53,7 @@ object Build extends sbt.Build {
     autoCompilerPlugins := true,
     cancelable in Global := true,
     resolvers ++= Seq(
+      Resolver.bintrayRepo("tanukkii007", "maven"),
       Resolver.sonatypeRepo("snapshots"),
       Resolver.typesafeRepo("releases"),
       Resolver.mavenLocal

@@ -59,8 +59,8 @@ docker-compose up
 ```
 or
 ```
-dependsOn(ProjectRef(uri("https://github.com/GlobalWebIndex/mawex.git#vx.y.x"), "api"))
-dependsOn(ProjectRef(uri("https://github.com/GlobalWebIndex/mawex.git#vx.y.x"), "core"))
+dependsOn(ProjectRef(uri("https://github.com/GlobalWebIndex/mawex.git#vx.y.x"), "mawex-api"))
+dependsOn(ProjectRef(uri("https://github.com/GlobalWebIndex/mawex.git#vx.y.x"), "mawex-core"))
 ```
 
 Then all you need to do is supplying your fat Jar to a Worker which is currently done by extending docker image and copying the fat jar on classpath.

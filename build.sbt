@@ -10,7 +10,7 @@ lazy val mawex = (project in file("."))
 lazy val `mawex-api` = (project in file("src/api"))
   .enablePlugins(CommonPlugin)
   .settings(name := "mawex-api")
-  .settings(libraryDependencies ++= akkaDeps ++ testingDeps)
+  .settings(libraryDependencies ++= Seq(akkaCluster, akkaActor, akkaPersistence, akkaPersistenceRedis, akkaKryoSerialization, akkaClusterCustomDowning, akkaTestkit, scalatest))
   .settings(publishSettings("GlobalWebIndex", "mawex-api", s3Resolver))
 
 lazy val `mawex-core` = (project in file("src/core"))

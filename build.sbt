@@ -1,5 +1,7 @@
 
-version in ThisBuild := "0.0.2"
+lazy val mawexVersion = "0.0.2"
+
+version in ThisBuild := mawexVersion
 crossScalaVersions in ThisBuild := Seq("2.12.1", "2.11.8")
 organization in ThisBuild := "net.globalwebindex"
 fork in Test in ThisBuild := true
@@ -25,6 +27,6 @@ lazy val `mawex-example-worker` = (project in file("src/example"))
   .enablePlugins(CommonPlugin, DockerPlugin)
   .settings(name := "mawex-example-worker")
   .settings(assemblySettings("mawex-example-worker", None))
-  .settings(copyJarTo(s"gwiq/mawex:$version", "gwiq", "mawex-example-worker", "mawex"))
+  .settings(copyJarTo(s"gwiq/mawex:$mawexVersion", "gwiq", "mawex-example-worker", "mawex"))
   .dependsOn(`mawex-core` % "compile->compile;test->test")
 

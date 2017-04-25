@@ -11,7 +11,6 @@ import com.typesafe.config.ConfigFactory
 import gwi.mawex.Service.Address
 import gwi.mawex._
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
-import redis.RedisClient
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
@@ -63,16 +62,13 @@ object MawexSpec {
 class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSupport with Matchers with FlatSpecLike with BeforeAndAfterAll with ImplicitSender {
   import MawexSpec._
 
-  val workTimeout = 3.seconds
-
   def this() = this(ActorSystem("ClusterSystem", ConfigFactory.parseString("akka.actor.provider=cluster").withFallback(ConfigFactory.load("serialization"))))
-  val backendSystem =  Service.buildClusterSystem(Address("localhost", 6379), "foo", Address("localhost", 0), List.empty, 1)
+
+  private[this] val backendSystem =  Service.buildClusterSystem(Address("localhost", 6379), "foo", Address("localhost", 0), List.empty, 1)
   Service.backendSingletonActorRef(1.second, backendSystem)()
-  val workerSystem = ActorSystem("ClusterSystem", workerConfig)
+  private[this] val workerSystem = ActorSystem("ClusterSystem", workerConfig)
 
-  val ConsumerGroup = "default"
-
-  val redisClient = new RedisClient("localhost", 6379)
+  private[this] val ConsumerGroup = "default"
 
   override def beforeAll(): Unit = try super.beforeAll() finally {
     startContainer("redis", "redis-test", 6379)(())
@@ -90,7 +86,7 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
     Await.ready(allTerminated, Duration.Inf)
   }
 
-  def initSystems = {
+  private[this] def initSystems = {
     val backendClusterAddress = Cluster(backendSystem).selfAddress
     val clusterProbe = TestProbe()
     Cluster(backendSystem).subscribe(clusterProbe.ref, classOf[MemberUp])

@@ -2,7 +2,7 @@ package example
 
 import akka.actor.{Actor, ActorSystem, Props, RootActorPath}
 import akka.cluster.Cluster
-import akka.cluster.ClusterEvent.{CurrentClusterState, MemberUp}
+import akka.cluster.ClusterEvent.{InitialStateAsEvents, MemberUp}
 import akka.cluster.client.{ClusterClient, ClusterClientSettings}
 import akka.cluster.pubsub.DistributedPubSub
 import akka.cluster.pubsub.DistributedPubSubMediator.{CurrentTopics, GetTopics, Subscribe, SubscribeAck}
@@ -62,16 +62,13 @@ object MawexSpec {
 class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSupport with Matchers with FlatSpecLike with BeforeAndAfterAll with ImplicitSender {
   import MawexSpec._
 
-  def this() = this(ActorSystem("ClusterSystem", ConfigFactory.parseString("akka.actor.provider=cluster").withFallback(ConfigFactory.load("serialization"))))
-
-  private[this] val backendSystem =  Service.buildClusterSystem(Address("localhost", 6379), "foo", Address("localhost", 0), List.empty, 1)
-  Service.backendSingletonActorRef(1.second, backendSystem)()
+  def this() = this(Service.buildClusterSystem(Address("localhost", 6379), "foo", Address("localhost", 0), List.empty, 1))
   private[this] val workerSystem = ActorSystem("ClusterSystem", workerConfig)
-
   private[this] val ConsumerGroup = "default"
 
   override def beforeAll(): Unit = try super.beforeAll() finally {
     startContainer("redis", "redis-test", 6379)(())
+    Service.backendSingletonActorRef(1.second, system)()
   }
 
   override def afterAll(): Unit = {
@@ -79,7 +76,6 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
     stopContainer("redis-test")(())
     val allTerminated = Future.sequence(Seq(
       system.terminate(),
-      backendSystem.terminate(),
       workerSystem.terminate()
     ))
 
@@ -87,11 +83,10 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
   }
 
   private[this] def initSystems = {
-    val backendClusterAddress = Cluster(backendSystem).selfAddress
+    val backendClusterAddress = Cluster(system).selfAddress
     val clusterProbe = TestProbe()
-    Cluster(backendSystem).subscribe(clusterProbe.ref, classOf[MemberUp])
-    clusterProbe.expectMsgType[CurrentClusterState]
-    Cluster(backendSystem).join(backendClusterAddress)
+    Cluster(system).subscribe(clusterProbe.ref, initialStateMode = InitialStateAsEvents, classOf[MemberUp])
+    Cluster(system).join(backendClusterAddress)
     clusterProbe.expectMsgType[MemberUp]
 
     val initialContacts = Set(RootActorPath(backendClusterAddress) / "system" / "receptionist")
@@ -99,9 +94,6 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
     for (n <- 1 to 3)
       workerSystem.actorOf(Worker.props(clusterWorkerClient, ConsumerGroup, Props(classOf[IdentityExecutor], Seq.empty), 1.second), "worker-" + n)
     workerSystem.actorOf(Worker.props(clusterWorkerClient, ConsumerGroup, Props[FlakyWorkExecutor], 1.second), "flaky-worker")
-
-    Cluster(system).join(backendClusterAddress)
-    clusterProbe.expectMsgType[MemberUp]
 
     val masterProxy = system.actorOf(Props(classOf[RemoteMasterProxy], initialContacts), "remoteMasterProxy")
 
@@ -118,7 +110,7 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
     // make sure pub sub topics are replicated over to the backend system before triggering any work
     within(10.seconds) {
       awaitAssert {
-        DistributedPubSub(backendSystem).mediator ! GetTopics
+        DistributedPubSub(system).mediator ! GetTopics
         expectMsgType[CurrentTopics].getTopics() should contain(Master.ResultsTopic)
       }
     }

@@ -28,6 +28,8 @@ object MawexSpec {
     }
     """.stripMargin
   ).withFallback(ConfigFactory.load("serialization"))
+    .withFallback(ConfigFactory.load())
+
 
   import scala.language.implicitConversions
   implicit def eitherToTry[B](either: Either[String, B]): Try[B] = {

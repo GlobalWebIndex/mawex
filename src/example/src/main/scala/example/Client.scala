@@ -21,7 +21,7 @@ object Client {
       }
       """.stripMargin
     ).withFallback(ConfigFactory.load("serialization"))
-
+      .withFallback(ConfigFactory.load())
 
     implicit val system = ActorSystem("ClusterSystem", conf)
 

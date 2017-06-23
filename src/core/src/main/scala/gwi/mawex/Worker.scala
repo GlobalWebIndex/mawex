@@ -12,14 +12,13 @@ import scala.util.{Failure, Success, Try}
 class Worker(clusterClient: ActorRef, consumerGroup: String, workExecutorProps: Props, registerInterval: FiniteDuration) extends Actor with ActorLogging {
   import Worker._
 
-  val workerId = WorkerId(UUID.randomUUID().toString, consumerGroup)
-
   import context.dispatcher
-  val registerTask = context.system.scheduler.schedule(500.millis, registerInterval, clusterClient, SendToAll("/user/master/singleton", w2m.Register(workerId)))
 
-  val taskExecutor = context.watch(context.actorOf(workExecutorProps, "exec"))
+  private[this] val workerId = WorkerId(UUID.randomUUID().toString, consumerGroup)
+  private[this] val registerWorker = context.system.scheduler.schedule(500.millis, registerInterval, clusterClient, SendToAll("/user/master/singleton", w2m.Register(workerId)))
+  private[this] val taskExecutor = context.watch(context.actorOf(workExecutorProps, "exec"))
+  private[this] var currentTaskId: Option[TaskId] = None
 
-  var currentTaskId: Option[TaskId] = None
   def taskId: TaskId = currentTaskId match {
     case Some(taskId) => taskId
     case None         => throw new IllegalStateException("Not working")
@@ -35,7 +34,7 @@ class Worker(clusterClient: ActorRef, consumerGroup: String, workExecutorProps: 
       Restart
   }
 
-  override def postStop(): Unit = registerTask.cancel()
+  override def postStop(): Unit = registerWorker.cancel()
 
   def receive = idle
 
@@ -73,7 +72,7 @@ class Worker(clusterClient: ActorRef, consumerGroup: String, workExecutorProps: 
 
   override def unhandled(message: Any): Unit = message match {
     case Terminated(`taskExecutor`) => context.stop(self)
-    case m2w.TaskReady                => log.warning("TaskIsReady unhandled !")
+    case m2w.TaskReady              => log.warning("TaskIsReady unhandled !")
     case _                          => super.unhandled(message)
   }
 
@@ -93,6 +92,6 @@ object Worker {
     }
   }
 
-  def props(clusterClient: ActorRef, consumerGroup: String, executorProps: Props, registerInterval: FiniteDuration = 10.seconds): Props =
+  def props(clusterClient: ActorRef, consumerGroup: String, executorProps: Props, registerInterval: FiniteDuration = 5.seconds): Props =
     Props(classOf[Worker], clusterClient, consumerGroup, executorProps, registerInterval)
 }

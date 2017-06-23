@@ -7,12 +7,12 @@ import akka.cluster.pubsub.{DistributedPubSub, DistributedPubSubMediator}
 import akka.persistence.PersistentActor
 import gwi.mawex.State._
 
-import scala.concurrent.duration.{Deadline, FiniteDuration}
+import scala.concurrent.duration._
 
-class Master(workTimeout: FiniteDuration) extends PersistentActor with ActorLogging {
+class Master(taskTimeout: FiniteDuration, workerRegisterInterval: FiniteDuration) extends PersistentActor with ActorLogging {
   import Master._
 
-  val mediator = DistributedPubSub(context.system).mediator
+  private[this] val mediator = DistributedPubSub(context.system).mediator
   ClusterClientReceptionist(context.system).registerService(self)
 
   // persistenceId must include cluster role to support multiple masters
@@ -22,13 +22,33 @@ class Master(workTimeout: FiniteDuration) extends PersistentActor with ActorLogg
   }
 
   // workers state is not event sourced
-  private var workersById = Map[WorkerId, WorkerStatus]()
+  private[this]  var workersById = Map[WorkerId, WorkerStatus]()
 
   // workState is event sourced
-  private var workState = State.empty
+  private[this]  var workState = State.empty
 
   import context.dispatcher
-  val cleanupTask = context.system.scheduler.schedule(workTimeout / 2, workTimeout / 2, self, CleanupTick)
+  private[this] val cleanupTask = context.system.scheduler.schedule(1.second, 1.second, self, CleanupTick)
+
+  private[this] def notifyWorkers(): Unit =
+    workState.getPendingTasks
+      .foreach { task =>
+        workersById
+          .filterKeys(_.consumerGroup == task.id.consumerGroup)
+          .foreach {
+            case (_, WorkerStatus(ref, Idle, _)) =>
+              ref ! m2w.TaskReady
+            case _ => // busy
+          }
+      }
+
+  private[this] def changeWorkerToIdle(workerId: WorkerId, taskId: TaskId): Unit =
+    workersById.get(workerId) match {
+      case Some(s @ WorkerStatus(_, Busy(busyTaskId), _)) if taskId == busyTaskId =>
+        workersById += (workerId -> s.copy(status = Idle))
+      case _ =>
+        log.warning("Worker {} state probably not persisted after recovery, workId {} missing ...", workerId, taskId)
+    }
 
   override def postStop(): Unit = cleanupTask.cancel()
 
@@ -41,19 +61,20 @@ class Master(workTimeout: FiniteDuration) extends PersistentActor with ActorLogg
   override def receiveCommand: Receive = {
     case w2m.Register(workerId) =>
       val s = sender()
-      if (workersById.get(workerId).exists(_.ref != s)) { // check for worker's ref change
-        val oldWorker = workersById(workerId)
+      val workerStatusOpt = workersById.get(workerId)
+      if (workerStatusOpt.exists(_.ref != s)) { // check for worker's ref change
+        val oldWorkerStatus = workerStatusOpt.get
         context.watch(s)
-        context.unwatch(oldWorker.ref)
-        workersById += (workerId -> oldWorker.copy(ref = s))
+        context.unwatch(oldWorkerStatus.ref)
+        workersById += (workerId -> oldWorkerStatus.copy(ref = s, registrationTime = System.currentTimeMillis()))
         log.warning("Existing worker {} registered again with different ActorRef !", workerId)
-      } else if (!workersById.contains(workerId)) {
+      } else if (workerStatusOpt.isEmpty) {
         log.info("Worker registered: {}", workerId)
         context.watch(s)
-        workersById += (workerId -> WorkerStatus(s, status = Idle))
-        workState.getPendingTasks
-          .find(_.id.consumerGroup == workerId.consumerGroup)
-          .foreach(_ => s ! m2w.TaskReady)
+        workersById += (workerId -> WorkerStatus(s, status = Idle, System.currentTimeMillis()))
+        notifyWorkers()
+      } else {
+        workersById += (workerId -> workerStatusOpt.get.copy(registrationTime = System.currentTimeMillis()))
       }
 
     case w2m.TaskRequest(workerId) =>
@@ -61,11 +82,11 @@ class Master(workTimeout: FiniteDuration) extends PersistentActor with ActorLogg
         .find(_.id.consumerGroup == workerId.consumerGroup)
         .foreach { task =>
           workersById.get(workerId) match {
-            case Some(s @ WorkerStatus(_, Idle)) =>
+            case Some(s @ WorkerStatus(_, Idle, _)) =>
               persist(TaskStarted(task.id)) { event =>
                 workState = workState.updated(event)
                 log.info("Giving worker {} some task {}", workerId, task.id)
-                workersById += (workerId -> s.copy(status = Busy(task.id, Deadline.now + workTimeout)))
+                workersById += (workerId -> s.copy(status = Busy(task.id)))
                 sender() ! task
               }
             case _ =>
@@ -116,41 +137,22 @@ class Master(workTimeout: FiniteDuration) extends PersistentActor with ActorLogg
         }
       }
 
-    case CleanupTick =>
-      for ((workerId, s@ WorkerStatus(_, Busy(taskId, timeout))) <- workersById if timeout.isOverdue) {
-        log.warning("Task timed out: {}", taskId)
-      }
-  }
-
-  def notifyWorkers(): Unit =
-    workState.getPendingTasks
-      .foreach { task =>
-        workersById
-          .filterKeys(_.consumerGroup == task.id.consumerGroup)
-          .foreach {
-            case (_, WorkerStatus(ref, Idle)) =>
-              ref ! m2w.TaskReady
-            case _ => // busy
-          }
-      }
-
-  def changeWorkerToIdle(workerId: WorkerId, taskId: TaskId): Unit =
-    workersById.get(workerId) match {
-      case Some(s @ WorkerStatus(_, Busy(`taskId`, _))) =>
-        workersById += (workerId -> s.copy(status = Idle))
-      case _ =>
-        log.warning("Worker {} state probably not persisted after recovery, workId {} missing ...", workerId, taskId)
-    }
-
-  // TODO do something with State#doneTaskIds, the set will grow indefinitely which is not good for a use case with millions of tasks
-
-  override def unhandled(message: Any): Unit = message match {
     case Terminated(ref) =>
+      log.info(s"$ref terminating ...")
       workersById.find(_._2.ref == ref).map(_._1).foreach { workerId =>
+        log.info(s"worker $workerId terminated ...")
         workersById -= workerId
       }
-    case _ =>
-      super.unhandled(message)
+
+    case CleanupTick =>
+      for ((workerId, WorkerStatus(_, _, registrationTime)) <- workersById if (System.currentTimeMillis() - registrationTime) > workerRegisterInterval.toMillis * 3) {
+        log.warning(s"worker $workerId has not registered, context.watch doesn't work !!!")
+      }
+      for ((taskId, creationTime) <- workState.getAcceptedTasks if (System.currentTimeMillis() - creationTime) > taskTimeout.toMillis) {
+        workersById
+          .collectFirst { case (workerId, WorkerStatus(_, Busy(busyTaskId), _)) if taskId == busyTaskId => workerId }
+          .fold(log.warning("Task {} timed out, no worker has asked for it !!!", taskId))(log.warning("Task {} timed out, worker {} has not finished on time ...", taskId, _))
+      }
   }
 
 }
@@ -158,12 +160,12 @@ class Master(workTimeout: FiniteDuration) extends PersistentActor with ActorLogg
 object Master {
   private sealed trait Status
   private case object Idle extends Status
-  private case class Busy(taskId: TaskId, deadline: Deadline) extends Status
-  private case class WorkerStatus(ref: ActorRef, status: Status)
+  private case class Busy(taskId: TaskId) extends Status
+  private case class WorkerStatus(ref: ActorRef, status: Status, registrationTime: Long)
   private case object CleanupTick
 
   val ResultsTopic = "results"
 
-  def apply(workTimeout: FiniteDuration): Props = Props(classOf[Master], workTimeout)
+  def apply(taskTimeout: FiniteDuration, workerRegisterInterval: FiniteDuration = 5.seconds): Props = Props(classOf[Master], taskTimeout, workerRegisterInterval)
 
 }

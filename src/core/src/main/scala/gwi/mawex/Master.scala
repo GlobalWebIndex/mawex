@@ -138,14 +138,14 @@ class Master(taskTimeout: FiniteDuration, workerRegisterInterval: FiniteDuration
       }
 
     case Terminated(ref) =>
-      log.info(s"$ref terminating ...")
+      log.info(s"Worker ${ref.path.name} is terminating ...")
       workersById.find(_._2.ref == ref).map(_._1).foreach { workerId =>
         log.info(s"worker $workerId terminated ...")
         workersById -= workerId
       }
 
     case CleanupTick =>
-      for ((workerId, WorkerStatus(_, _, registrationTime)) <- workersById if (System.currentTimeMillis() - registrationTime) > workerRegisterInterval.toMillis * 3) {
+      for ((workerId, WorkerStatus(_, _, registrationTime)) <- workersById if (System.currentTimeMillis() - registrationTime) > workerRegisterInterval.toMillis * 6) {
         log.warning(s"worker $workerId has not registered, context.watch doesn't work !!!")
       }
       for ((taskId, creationTime) <- workState.getAcceptedTasks if (System.currentTimeMillis() - creationTime) > taskTimeout.toMillis) {

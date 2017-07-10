@@ -9,7 +9,7 @@ import gwi.mawex.State._
 
 import scala.concurrent.duration._
 
-class Master(taskTimeout: FiniteDuration, workerRegisterInterval: FiniteDuration) extends PersistentActor with ActorLogging {
+class Master(resultTopicName: String, taskTimeout: FiniteDuration, workerRegisterInterval: FiniteDuration) extends PersistentActor with ActorLogging {
   import Master._
 
   private[this] val mediator = DistributedPubSub(context.system).mediator
@@ -106,7 +106,7 @@ class Master(taskTimeout: FiniteDuration, workerRegisterInterval: FiniteDuration
             changeWorkerToIdle(workerId, taskId)
             persist(TaskCompleted(taskId, result)) { event =>
               workState = workState.updated(event)
-              mediator ! DistributedPubSubMediator.Publish(ResultsTopic, TaskResult(finishedTask, r))
+              mediator ! DistributedPubSubMediator.Publish(resultTopicName, TaskResult(finishedTask, r))
             }
         }
       }
@@ -121,7 +121,7 @@ class Master(taskTimeout: FiniteDuration, workerRegisterInterval: FiniteDuration
           changeWorkerToIdle(workerId, taskId)
           persist(WorkerFailed(taskId)) { event =>
             workState = workState.updated(event)
-            mediator ! DistributedPubSubMediator.Publish(ResultsTopic, TaskResult(finishedTask, r))
+            mediator ! DistributedPubSubMediator.Publish(resultTopicName, TaskResult(finishedTask, r))
           }
       }
 
@@ -164,8 +164,6 @@ object Master {
   private case class WorkerStatus(ref: ActorRef, status: Status, registrationTime: Long)
   private case object CleanupTick
 
-  val ResultsTopic = "results"
-
-  def apply(taskTimeout: FiniteDuration, workerRegisterInterval: FiniteDuration = 5.seconds): Props = Props(classOf[Master], taskTimeout, workerRegisterInterval)
+  def apply(resultTopicName: String, taskTimeout: FiniteDuration, workerRegisterInterval: FiniteDuration = 5.seconds): Props = Props(classOf[Master], resultTopicName, taskTimeout, workerRegisterInterval)
 
 }

@@ -84,7 +84,7 @@ object Service {
   def backendSingletonActorRef(taskTimeout: FiniteDuration, system: ActorSystem, name: String)(arf: ActorRefFactory = system): ActorRef = {
     arf.actorOf(
       ClusterSingletonManager.props(
-        Master(taskTimeout),
+        Master(name, taskTimeout),
         PoisonPill,
         ClusterSingletonManagerSettings(system).withRole("backend")
       ),

@@ -106,14 +106,14 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
     val (clusterWorkerClient, masterProxy) = initSystems
 
     val results = TestProbe()
-    DistributedPubSub(system).mediator ! Subscribe(Master.ResultsTopic, results.ref)
+    DistributedPubSub(system).mediator ! Subscribe("master", results.ref)
     expectMsgType[SubscribeAck]
 
     // make sure pub sub topics are replicated over to the backend system before triggering any work
     within(10.seconds) {
       awaitAssert {
         DistributedPubSub(system).mediator ! GetTopics
-        expectMsgType[CurrentTopics].getTopics() should contain(Master.ResultsTopic)
+        expectMsgType[CurrentTopics].getTopics() should contain("master")
       }
     }
 

@@ -34,7 +34,7 @@ class RemoteMasterProxy(initialContacts: Set[ActorPath]) extends Actor with Acto
 
   var senderByTaskId = Map.empty[TaskId, ActorRef]
 
-  private val clusterClient = context.system.actorOf(ClusterClient.props(ClusterClientSettings(context.system).withInitialContacts(initialContacts)), "cluster-client")
+  private val clusterClient = context.system.actorOf(ClusterClient.props(ClusterClientSettings(context.system).withInitialContacts(initialContacts)))
 
   def receive = {
     case CheckForZombieTask(taskId) =>

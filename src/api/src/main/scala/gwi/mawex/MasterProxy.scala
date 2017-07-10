@@ -11,7 +11,7 @@ import scala.concurrent.duration._
 
 class LocalMasterProxy extends Actor {
   import context.dispatcher
-  val masterProxy = context.actorOf(
+  private val masterProxy = context.actorOf(
     ClusterSingletonProxy.props(
       settings = ClusterSingletonProxySettings(context.system).withRole("backend"),
       singletonManagerPath = "/user/master"
@@ -34,7 +34,7 @@ class RemoteMasterProxy(initialContacts: Set[ActorPath]) extends Actor with Acto
 
   var senderByTaskId = Map.empty[TaskId, ActorRef]
 
-  val clusterClient = context.system.actorOf(ClusterClient.props(ClusterClientSettings(context.system).withInitialContacts(initialContacts)), "cluster-client")
+  private val clusterClient = context.system.actorOf(ClusterClient.props(ClusterClientSettings(context.system).withInitialContacts(initialContacts)), "cluster-client")
 
   def receive = {
     case CheckForZombieTask(taskId) =>

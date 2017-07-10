@@ -9,7 +9,7 @@ import gwi.mawex.State._
 
 import scala.concurrent.duration._
 
-class Master(resultTopicName: String, taskTimeout: FiniteDuration, workerRegisterInterval: FiniteDuration) extends PersistentActor with ActorLogging {
+class Master(masterId: String, taskTimeout: FiniteDuration, workerRegisterInterval: FiniteDuration) extends PersistentActor with ActorLogging {
   import Master._
 
   private[this] val mediator = DistributedPubSub(context.system).mediator
@@ -106,7 +106,7 @@ class Master(resultTopicName: String, taskTimeout: FiniteDuration, workerRegiste
             changeWorkerToIdle(workerId, taskId)
             persist(TaskCompleted(taskId, result)) { event =>
               workState = workState.updated(event)
-              mediator ! DistributedPubSubMediator.Publish(resultTopicName, TaskResult(finishedTask, r))
+              mediator ! DistributedPubSubMediator.Publish(masterId, TaskResult(finishedTask, r))
             }
         }
       }
@@ -121,7 +121,7 @@ class Master(resultTopicName: String, taskTimeout: FiniteDuration, workerRegiste
           changeWorkerToIdle(workerId, taskId)
           persist(WorkerFailed(taskId)) { event =>
             workState = workState.updated(event)
-            mediator ! DistributedPubSubMediator.Publish(resultTopicName, TaskResult(finishedTask, r))
+            mediator ! DistributedPubSubMediator.Publish(masterId, TaskResult(finishedTask, r))
           }
       }
 

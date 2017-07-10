@@ -17,8 +17,8 @@ class Master(taskTimeout: FiniteDuration, workerRegisterInterval: FiniteDuration
 
   // persistenceId must include cluster role to support multiple masters
   override def persistenceId: String = Cluster(context.system).selfRoles.find(_.startsWith("backend-")) match {
-    case Some(role) => role + "-master"
-    case None       => "master"
+    case Some(role) => role + self.path.name
+    case None       => self.path.name
   }
 
   // workers state is not event sourced

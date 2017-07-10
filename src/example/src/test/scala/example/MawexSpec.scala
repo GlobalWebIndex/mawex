@@ -70,7 +70,7 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
 
   override def beforeAll(): Unit = try super.beforeAll() finally {
     startContainer("redis", "redis-test", 6379)(())
-    Service.backendSingletonActorRef(1.second, system)()
+    Service.backendSingletonActorRef(1.second, system, "master")()
   }
 
   override def afterAll(): Unit = {

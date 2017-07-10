@@ -81,14 +81,14 @@ object Service {
         .withFallback(ConfigFactory.load())
     )
 
-  def backendSingletonActorRef(taskTimeout: FiniteDuration, system: ActorSystem)(arf: ActorRefFactory = system): ActorRef = {
+  def backendSingletonActorRef(taskTimeout: FiniteDuration, system: ActorSystem, name: String)(arf: ActorRefFactory = system): ActorRef = {
     arf.actorOf(
       ClusterSingletonManager.props(
         Master(taskTimeout),
         PoisonPill,
         ClusterSingletonManagerSettings(system).withRole("backend")
       ),
-      "master"
+      name
     )
   }
 
@@ -155,7 +155,7 @@ object MasterCmd extends Command(name = "master", description = "launches master
   def run() = {
     val redisPassword = sys.env.getOrElse("REDIS_PASSWORD", throw new IllegalArgumentException("REDIS_PASSWORD env var must defined !!!"))
     val system = buildClusterSystem(redisAddress, redisPassword, hostAddress, seedNodes, seedNodes.size)
-    backendSingletonActorRef(taskTimeout.seconds, system)()
+    backendSingletonActorRef(taskTimeout.seconds, system, "master")()
   }
 
 }

@@ -8,6 +8,8 @@ import gwi.mawex.Service.Address
 
 object Client {
 
+  val MasterId = "master"
+
   def startRemoteClient(hostAddress: Address, seedNodes: List[Address]): Unit = {
     val conf = ConfigFactory.parseString(
       s"""
@@ -30,7 +32,7 @@ object Client {
 
     Cluster(system).joinSeedNodes(seedNodeAddresses)
 
-    val masterProxy = system.actorOf(RemoteMasterProxy.props(initialContacts), "masterProxy")
+    val masterProxy = system.actorOf(RemoteMasterProxy.props(MasterId, initialContacts), "masterProxy")
     system.actorOf(Props(classOf[Producer], masterProxy), "producer")
     system.actorOf(Props[Consumer], "consumer")
   }

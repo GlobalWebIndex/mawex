@@ -98,7 +98,7 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
       workerSystem.actorOf(Worker.props(MasterId, clusterWorkerClient, ConsumerGroup, Props(classOf[IdentityExecutor], Seq.empty), 1.second), "worker-" + n)
     workerSystem.actorOf(Worker.props(MasterId, clusterWorkerClient, ConsumerGroup, Props[FlakyWorkExecutor], 1.second), "flaky-worker")
 
-    val masterProxy = system.actorOf(Props(classOf[RemoteMasterProxy], initialContacts), "remoteMasterProxy")
+    val masterProxy = system.actorOf(RemoteMasterProxy.props(MasterId, initialContacts), "remoteMasterProxy")
 
     clusterWorkerClient -> masterProxy
   }

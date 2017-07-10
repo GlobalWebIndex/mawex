@@ -9,14 +9,16 @@ import akka.util.Timeout
 
 import scala.concurrent.duration._
 
-class LocalMasterProxy extends Actor {
+class LocalMasterProxy(masterId: String) extends Actor {
   import context.dispatcher
-  private val masterProxy = context.actorOf(
-    ClusterSingletonProxy.props(
-      settings = ClusterSingletonProxySettings(context.system).withRole("backend"),
-      singletonManagerPath = "/user/master"
-    ),
-    name = "localMasterProxy")
+  private[this] val masterProxy =
+    context.actorOf(
+      ClusterSingletonProxy.props(
+        settings = ClusterSingletonProxySettings(context.system).withRole("backend"),
+        singletonManagerPath = s"/user/$masterId"
+      ),
+      name = s"localMasterProxy-$masterId"
+    )
 
   def receive = {
     case task: Task =>
@@ -28,13 +30,17 @@ class LocalMasterProxy extends Actor {
 
 }
 
-class RemoteMasterProxy(initialContacts: Set[ActorPath]) extends Actor with ActorLogging {
+object LocalMasterProxy {
+  def props(masterId: String): Props = Props(classOf[LocalMasterProxy], masterId)
+}
+
+class RemoteMasterProxy(masterId: String, initialContacts: Set[ActorPath]) extends Actor with ActorLogging {
   import RemoteMasterProxy._
   import context.dispatcher
 
   var senderByTaskId = Map.empty[TaskId, ActorRef]
 
-  private val clusterClient = context.system.actorOf(ClusterClient.props(ClusterClientSettings(context.system).withInitialContacts(initialContacts)))
+  private[this] val clusterClient = context.system.actorOf(ClusterClient.props(ClusterClientSettings(context.system).withInitialContacts(initialContacts)))
 
   def receive = {
     case CheckForZombieTask(taskId) =>
@@ -53,7 +59,7 @@ class RemoteMasterProxy(initialContacts: Set[ActorPath]) extends Actor with Acto
       }
     case task: Task =>
       senderByTaskId += (task.id -> sender())
-      clusterClient ! SendToAll("/user/master/singleton", task)
+      clusterClient ! SendToAll(s"/user/$masterId/singleton", task)
       context.system.scheduler.scheduleOnce(5.seconds, self, CheckForZombieTask(task.id))
   }
 
@@ -61,5 +67,5 @@ class RemoteMasterProxy(initialContacts: Set[ActorPath]) extends Actor with Acto
 
 object RemoteMasterProxy {
   case class CheckForZombieTask(id: TaskId)
-  def props(initialContacts: Set[ActorPath]) = Props(classOf[RemoteMasterProxy], initialContacts)
+  def props(masterId: String, initialContacts: Set[ActorPath]) = Props(classOf[RemoteMasterProxy], masterId, initialContacts)
 }

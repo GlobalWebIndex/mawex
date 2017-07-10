@@ -7,9 +7,8 @@ import gwi.mawex._
 class Consumer extends Actor with ActorLogging {
 
   private[this] val mediator = DistributedPubSub(context.system).mediator
-  private[this] val MasterId = "master"
 
-  mediator ! DistributedPubSubMediator.Subscribe(MasterId, self)
+  mediator ! DistributedPubSubMediator.Subscribe(Client.MasterId, self)
 
   def receive = {
     case _: DistributedPubSubMediator.SubscribeAck =>

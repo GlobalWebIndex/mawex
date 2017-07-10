@@ -164,6 +164,6 @@ object Master {
   private case class WorkerStatus(ref: ActorRef, status: Status, registrationTime: Long)
   private case object CleanupTick
 
-  def apply(resultTopicName: String, taskTimeout: FiniteDuration, workerRegisterInterval: FiniteDuration = 5.seconds): Props = Props(classOf[Master], resultTopicName, taskTimeout, workerRegisterInterval)
+  def props(resultTopicName: String, taskTimeout: FiniteDuration, workerRegisterInterval: FiniteDuration = 5.seconds): Props = Props(classOf[Master], resultTopicName, taskTimeout, workerRegisterInterval)
 
 }

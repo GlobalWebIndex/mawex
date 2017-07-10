@@ -114,7 +114,7 @@ object Service {
         .withFallback(ConfigFactory.load())
     )
 
-  def workerActorRef(contactPoints: List[Address], consumerGroup: String, executorClazz: Class[_], executorArgs: Seq[String], system: ActorSystem)(arf: ActorRefFactory = system): ActorRef = {
+  def workerActorRef(masterId: String, contactPoints: List[Address], consumerGroup: String, executorClazz: Class[_], executorArgs: Seq[String], system: ActorSystem)(arf: ActorRefFactory = system): ActorRef = {
     val initialContacts =
       contactPoints
         .map { case Address(host, port) => s"akka.tcp://ClusterSystem@$host:$port" }
@@ -122,7 +122,7 @@ object Service {
         .toSet
 
     val clusterClient = arf.actorOf(ClusterClient.props(ClusterClientSettings(system).withInitialContacts(initialContacts)), "clusterClient")
-    arf.actorOf(Worker.props(clusterClient, consumerGroup, Props(executorClazz, executorArgs)), "worker")
+    arf.actorOf(Worker.props(masterId, clusterClient, consumerGroup, Props(executorClazz, executorArgs)), "worker")
   }
 
 }
@@ -149,13 +149,14 @@ object SandBoxCmd extends Command(name = "sandbox", description = "executes arbi
 object MasterCmd extends Command(name = "master", description = "launches master") with Service {
   import Service._
 
-  var taskTimeout = opt[Int](default = 60*60, description = "timeout for a task in seconds")
+  var taskTimeout  = opt[Int](default = 60*60, description = "timeout for a task in seconds")
   var redisAddress = arg[Address](required = true, name="redis-address", description = "host:port of redis")
+  var masterId     = opt[String](default = "master", name="master-id")
 
   def run() = {
     val redisPassword = sys.env.getOrElse("REDIS_PASSWORD", throw new IllegalArgumentException("REDIS_PASSWORD env var must defined !!!"))
     val system = buildClusterSystem(redisAddress, redisPassword, hostAddress, seedNodes, seedNodes.size)
-    backendSingletonActorRef(taskTimeout.seconds, system, "master")()
+    backendSingletonActorRef(taskTimeout.seconds, system, masterId)()
   }
 
 }
@@ -163,14 +164,15 @@ object MasterCmd extends Command(name = "master", description = "launches master
 object WorkerCmd extends Command(name = "workers", description = "launches workers") with Service {
   import Service._
 
-  var consumerGroups = opt[List[String]](default = List("default"), description = "sum,sum,add,add,add,divide - 6 workers in 3 consumer groups")
-  var executorClass = arg[String](required = true, name="executor-class", description = "Full class name of executor Actor, otherwise identity ping/pong executor will be used")
-  var executorArgs = arg[Option[String]](required = false, name="executor-args", description = "Arguments to be passed to forked executor jvm process")
+  var consumerGroups  = opt[List[String]](default = List("default"), description = "sum,sum,add,add,add,divide - 6 workers in 3 consumer groups")
+  var executorClass   = arg[String](required = true, name="executor-class", description = "Full class name of executor Actor, otherwise identity ping/pong executor will be used")
+  var executorArgs    = arg[Option[String]](required = false, name="executor-args", description = "Arguments to be passed to forked executor jvm process")
+  var masterId        = opt[String](default = "master", name="master-id")
 
   def run() =
     consumerGroups.foreach { consumerGroup =>
       val system = buildWorkerSystem(hostAddress)
-      workerActorRef(seedNodes, consumerGroup, Class.forName(executorClass), executorArgs.map(_.split(" ").filter(_.nonEmpty).toSeq).getOrElse(Seq.empty), system)()
+      workerActorRef(masterId, seedNodes, consumerGroup, Class.forName(executorClass), executorArgs.map(_.split(" ").filter(_.nonEmpty).toSeq).getOrElse(Seq.empty), system)()
     }
 
 }

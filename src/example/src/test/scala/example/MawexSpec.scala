@@ -67,10 +67,11 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
   def this() = this(Service.buildClusterSystem(Address("localhost", 6379), "foo", Address("localhost", 0), List.empty, 1))
   private[this] val workerSystem = ActorSystem("ClusterSystem", workerConfig)
   private[this] val ConsumerGroup = "default"
+  private[this] val MasterId = "master"
 
   override def beforeAll(): Unit = try super.beforeAll() finally {
     startContainer("redis", "redis-test", 6379)(())
-    Service.backendSingletonActorRef(1.second, system, "master")()
+    Service.backendSingletonActorRef(1.second, system, MasterId)()
   }
 
   override def afterAll(): Unit = {
@@ -94,8 +95,8 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
     val initialContacts = Set(RootActorPath(backendClusterAddress) / "system" / "receptionist")
     val clusterWorkerClient = workerSystem.actorOf(ClusterClient.props(ClusterClientSettings(workerSystem).withInitialContacts(initialContacts)), "clusterWorkerClient")
     for (n <- 1 to 3)
-      workerSystem.actorOf(Worker.props(clusterWorkerClient, ConsumerGroup, Props(classOf[IdentityExecutor], Seq.empty), 1.second), "worker-" + n)
-    workerSystem.actorOf(Worker.props(clusterWorkerClient, ConsumerGroup, Props[FlakyWorkExecutor], 1.second), "flaky-worker")
+      workerSystem.actorOf(Worker.props(MasterId, clusterWorkerClient, ConsumerGroup, Props(classOf[IdentityExecutor], Seq.empty), 1.second), "worker-" + n)
+    workerSystem.actorOf(Worker.props(MasterId, clusterWorkerClient, ConsumerGroup, Props[FlakyWorkExecutor], 1.second), "flaky-worker")
 
     val masterProxy = system.actorOf(Props(classOf[RemoteMasterProxy], initialContacts), "remoteMasterProxy")
 
@@ -106,14 +107,14 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
     val (clusterWorkerClient, masterProxy) = initSystems
 
     val results = TestProbe()
-    DistributedPubSub(system).mediator ! Subscribe("master", results.ref)
+    DistributedPubSub(system).mediator ! Subscribe(MasterId, results.ref)
     expectMsgType[SubscribeAck]
 
     // make sure pub sub topics are replicated over to the backend system before triggering any work
     within(10.seconds) {
       awaitAssert {
         DistributedPubSub(system).mediator ! GetTopics
-        expectMsgType[CurrentTopics].getTopics() should contain("master")
+        expectMsgType[CurrentTopics].getTopics() should contain(MasterId)
       }
     }
 
@@ -143,7 +144,7 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
 
     // consumer groups
     for (n <- 4 to 10)
-      workerSystem.actorOf(Worker.props(clusterWorkerClient, n.toString, Props(classOf[IdentityExecutor], Seq.empty), 1.second), "worker-" + n)
+      workerSystem.actorOf(Worker.props(MasterId, clusterWorkerClient, n.toString, Props(classOf[IdentityExecutor], Seq.empty), 1.second), "worker-" + n)
     for (n <- 201 to 300) {
       val taskId = TaskId(n.toString, Random.shuffle(4 to 10).head.toString)
       masterProxy ! Task(taskId, n)

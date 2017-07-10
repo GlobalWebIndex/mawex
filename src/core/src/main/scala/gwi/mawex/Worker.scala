@@ -9,13 +9,13 @@ import akka.cluster.client.ClusterClient.SendToAll
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
-class Worker(clusterClient: ActorRef, consumerGroup: String, workExecutorProps: Props, registerInterval: FiniteDuration) extends Actor with ActorLogging {
+class Worker(masterId: String, clusterClient: ActorRef, consumerGroup: String, workExecutorProps: Props, registerInterval: FiniteDuration) extends Actor with ActorLogging {
   import Worker._
 
   import context.dispatcher
 
   private[this] val workerId = WorkerId(UUID.randomUUID().toString, consumerGroup)
-  private[this] val registerWorker = context.system.scheduler.schedule(500.millis, registerInterval, clusterClient, SendToAll("/user/master/singleton", w2m.Register(workerId)))
+  private[this] val registerWorker = context.system.scheduler.schedule(500.millis, registerInterval, clusterClient, SendToAll(s"/user/$masterId/singleton", w2m.Register(workerId)))
   private[this] val taskExecutor = context.watch(context.actorOf(workExecutorProps, "exec"))
   private[this] var currentTaskId: Option[TaskId] = None
 
@@ -77,7 +77,7 @@ class Worker(clusterClient: ActorRef, consumerGroup: String, workExecutorProps: 
   }
 
   def sendToMaster(msg: Any): Unit = {
-    clusterClient ! SendToAll("/user/master/singleton", msg)
+    clusterClient ! SendToAll(s"/user/$masterId/singleton", msg)
   }
 
 }
@@ -92,6 +92,6 @@ object Worker {
     }
   }
 
-  def props(clusterClient: ActorRef, consumerGroup: String, executorProps: Props, registerInterval: FiniteDuration = 5.seconds): Props =
-    Props(classOf[Worker], clusterClient, consumerGroup, executorProps, registerInterval)
+  def props(masterId: String, clusterClient: ActorRef, consumerGroup: String, executorProps: Props, registerInterval: FiniteDuration = 5.seconds): Props =
+    Props(classOf[Worker], masterId, clusterClient, consumerGroup, executorProps, registerInterval)
 }

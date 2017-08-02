@@ -1,6 +1,7 @@
 package gwi.mawex
 
 import scala.collection.immutable.Queue
+import scala.collection.breakOut
 
 object State {
 
@@ -11,7 +12,6 @@ object State {
   case class TaskStarted(taskId: TaskId) extends TaskDomainEvent
   case class TaskCompleted(taskId: TaskId, result: Any) extends TaskDomainEvent
   case class WorkerFailed(taskId: TaskId) extends TaskDomainEvent
-  // case class TaskTimedOut(taskId: TaskId) extends TaskDomainEvent
 
 }
 
@@ -21,6 +21,7 @@ case class State private(private val pendingTasks: Queue[Task], private val task
   import State._
 
   def getPendingTasks: List[Task] = pendingTasks.toList
+  def getPendingConsumerGroups: Set[String] = pendingTasks.map(_.id.consumerGroup)(breakOut)
   def getAcceptedTasks: Map[TaskId, Long] = acceptedTaskIds
   def isAccepted(taskId: TaskId): Boolean = acceptedTaskIds.contains(taskId)
   def getTaskInProgress(taskId: TaskId): Option[Task] = tasksInProgress.get(taskId)
@@ -41,10 +42,5 @@ case class State private(private val pendingTasks: Queue[Task], private val task
     case WorkerFailed(taskId) =>
       copy(tasksInProgress = tasksInProgress - taskId, acceptedTaskIds = acceptedTaskIds - taskId, doneTaskIds = doneTaskIds + taskId)
 
-/*
-    case TaskTimedOut(taskId) =>
-      val rest = pendingTasks.filter(_.id != taskId)
-      copy(pendingTasks = rest, tasksInProgress = tasksInProgress - taskId, acceptedTaskIds = acceptedTaskIds - taskId, doneTaskIds = doneTaskIds + taskId)
-*/
   }
 }

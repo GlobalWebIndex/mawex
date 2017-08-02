@@ -52,6 +52,7 @@ class Master(masterId: String, taskTimeout: FiniteDuration, workerRegisterInterv
       workersById.registerWorker(workerId, sender(), context).foreach( _ => notifyWorkers() )
 
     case w2m.TaskRequest(workerId) =>
+      val s = sender()
       workState.getPendingTasks
         .find(_.id.consumerGroup == workerId.consumerGroup)
         .foreach { task =>
@@ -60,7 +61,7 @@ class Master(masterId: String, taskTimeout: FiniteDuration, workerRegisterInterv
               workState = workState.updated(event)
               log.info("Giving worker {} some task {}", workerId, task.id)
               workersById.busy(workerId, task.id)
-              sender() ! task
+              s ! task
             }
           }
         }
@@ -85,12 +86,13 @@ class Master(masterId: String, taskTimeout: FiniteDuration, workerRegisterInterv
       }
 
     case task: Task =>
+      val s = sender()
       if (workState.isAccepted(task.id)) { // idempotent
-        sender() ! m2p.TaskAck(task.id)
+        s ! m2p.TaskAck(task.id)
       } else {
         log.info("Accepted task: {}", task.id)
         persist(TaskAccepted(task)) { event =>
-          sender() ! m2p.TaskAck(task.id) // Ack back to original sender
+          s ! m2p.TaskAck(task.id) // Ack back to original sender
           workState = workState.updated(event)
           notifyWorkers()
         }

@@ -3,41 +3,68 @@
 [![Build Status](https://travis-ci.org/GlobalWebIndex/mawex.svg?branch=master)](https://travis-ci.org/GlobalWebIndex/mawex)
 
 ```
-+--------------------+                             +--------------------+
-|                    |                             |                    |
-| Consumer Group B   |                             | Consumer Group A   |
-|                    |         +--------+          |                    |
-|  +--------------+  | Task B  |        | Task A   |  +--------------+  |
-|  |              |  <---------+ Master +---------->  |              |  |
-|  | Worker       |  |         |        |          |  | Worker       |  |
-|  |  +--------+  |  |    +----+------^-+          |  |  +--------+  |  |
-|  |  |Executor|  |  |    |           |            |  |  |Executor|  |  |
-|  |  +--------+  |  | +--v---------+ |            |  |  +--------+  |  |
-|  +--------------+  | |            | |            |  +--------------+  |
-|  +--------------+  | |Result Topic| |  Task A    |  +--------------+  |
-|  |              |  | |            | |  Task B    |  |              |  |
-|  | Worker       |  | +--+---------+ |            |  | Worker       |  |
-|  |  +--------+  |  |    |           |            |  |  +--------+  |  |
-|  |  |Executor|  |  |    |    +------+-+          |  |  |Executor|  |  |
-|  |  +--------+  |  |    |    |        |          |  |  +--------+  |  |
-|  +--------------+  |    +----> Client |          |  +--------------+  |
-+--------------------+         |        |          +--------------------+
-                               +--------+
++-------------------------------------------------------------------------------------+
+|                                   Pod x1 t2.small                                   |
+| +------------------+ +------------------+ +------------------+ +------------------+ |
+| | Consumer Group C | | Consumer Group D | | Consumer Group E | | Consumer Group F | |
+| | +--------------+ | | +--------------+ | | +--------------+ | | +--------------+ | |
+| | | Worker       | | | | Worker       | | | | Worker       | | | | Worker       | | |
+| | |  +--------+  | | | |  +--------+  | | | |  +--------+  | | | |  +--------+  | | |
+| | |  |Executor|  | | | |  |Executor|  | | | |  |Executor|  | | | |  |Executor|  | | |
+| | |  +--------+  | | | |  +--------+  | | | |  +--------+  | | | |  +--------+  | | |
+| | +--------------+ | | +--------------+ | | +--------------+ | | +--------------+ | |
+| +------------------+ +------------------+ +------------------+ +------------------+ |
++-------------------------------------------------------------------------------------+
+
+  +----------------------+                +----------+         +----------------------+
+  |   Pod y1 m4.xlarge   |                |Master    |         |   Pod y2 m4.xlarge   |
+  | +------------------+ |             +-----------+ |         | +------------------+ |
+  | | Consumer Group A | |             |Master     | |         | | Consumer Group A | |
+  | | +--------------+ | |           +-----------+ | |         | | +--------------+ | |
+  | | | Worker       | | |    Task B |Master     | | | Task A  | | | Worker       | | |
+  | | |  +--------+  | | |   +-------+           | | +-----------> |  +--------+  | | |
+  | | |  |Executor|  | | |   |       |           | +-+         | | |  |Executor|  | | |
+  | | |  +--------+  | | |   |       |           +-+           | | |  +--------+  | | |
+  | | +--------------+ | |   |   +---+---------^-+             | | +--------------+ | |
+  | +------------------+ |   |   |             |               | +------------------+ |
+  | +------------------+ |   |  +v-----------+ |               | +------------------+ |
+  | | Consumer Group B | |   |  |            | |               | | Consumer Group B | |
+  | | +--------------+ | |   |  |Result Topic| |               | | +--------------+ | |
+  | | | Worker       | | |   |  |            | |               | | | Worker       | | |
+  | | |  +--------+  | <-----+  +----+-------+ |               | | |  +--------+  | | |
+  | | |  |Executor|  | | |           |         |               | | |  |Executor|  | | |
+  | | |  +--------+  | | |           |    +----+---+           | | |  +--------+  | | |
+  | | +--------------+ | |           |    |        |           | | +--------------+ | |
+  | +------------------+ |           +----> Client |           | +------------------+ |
+  +----------------------+                |        |           +----------------------+
+                                          +--------+
+
++-------------------------------------------------------------------------------------+
+|                                    Pod x2 t2.small                                  |
+| +------------------+ +------------------+ +------------------+ +------------------+ |
+| | Consumer Group C | | Consumer Group D | | Consumer Group E | | Consumer Group F | |
+| | +--------------+ | | +--------------+ | | +--------------+ | | +--------------+ | |
+| | | Worker       | | | | Worker       | | | | Worker       | | | | Worker       | | |
+| | |  +--------+  | | | |  +--------+  | | | |  +--------+  | | | |  +--------+  | | |
+| | |  |Executor|  | | | |  |Executor|  | | | |  |Executor|  | | | |  |Executor|  | | |
+| | |  +--------+  | | | |  +--------+  | | | |  +--------+  | | | |  +--------+  | | |
+| | +--------------+ | | +--------------+ | | +--------------+ | | +--------------+ | |
+| +------------------+ +------------------+ +------------------+ +------------------+ |
++-------------------------------------------------------------------------------------+
 ```
 
 Lightweight library for distributed task scheduling based on Master Worker Executor model.
 
-It deals with following problems :
- 1. scalability
-    - add more workers on the fly if tasks are getting more heavy or they start coming more frequently
- 2. resiliency
-    - tasks are executed by Executor in forked JVM process which minimizes possibility of system failures
-    - Master is a Akka cluster Singleton - when one instance crashes another one takes over
-    - Master is a persistent Akka actor - work state would replay in case of a crash
- 3. load balancing
-    - consumer groups paradigm taken from Kafka
-
-It is based on [activator-akka-distributed-workers](https://github.com/typesafehub/activator-akka-distributed-workers) project, most of the credit goes there !!!
+System is designed for :
+ 1. redundancy
+    - Consumer Groups - one of a kind should be always present at least on 2 machines
+    - Master is a Akka cluster Singleton and persistent actor :
+        - when one instance crashes another one takes over, work state would replay in case of a crash, use at least 3 nodes
+ 2. both horizontal and vertical scalability so that one can :
+    - add more workers on the fly if tasks start coming more frequently
+    - switch to bigger pods if workers need more resources, memory especially
+ 2. resiliency :
+    - tasks are executed by Executor in forked JVM process which minimizes possibility of system failures in long terms
 
 ### mawex in action :
 

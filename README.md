@@ -66,6 +66,16 @@ System is designed for :
  2. resiliency :
     - tasks are executed by Executor in forked JVM process which minimizes possibility of system failures in long terms
 
+Tasks that are going to Consumer Groups A,B or C,D,E,F are similarly resource demanding so they can live on
+the same machines. Master executes tasks sequentially within a Pod, never concurrently, so that you can
+use very small instances cost-effectively as this allows you to utilize machine's resources on almost 100%
+if you run a lot of microservices.
+
+### Use case
+
+This system was designed for an ETL pipeline orchestrated by [saturator](https://github.com/GlobalWebIndex/saturator)
+which is a FSM that sees pipeline as layered DAG and saturates/satisfies dependencies by executing ETL tasks on Mawex.
+
 ### mawex in action :
 
 Mawex akka persistence is tested with redis only because it is the best fit for mawex unless

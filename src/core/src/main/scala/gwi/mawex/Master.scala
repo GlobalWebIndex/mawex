@@ -8,8 +8,8 @@ import akka.event.LoggingAdapter
 import akka.persistence.PersistentActor
 import gwi.mawex.State._
 
-import scala.concurrent.duration._
 import scala.collection.mutable
+import scala.concurrent.duration._
 
 class Master(masterId: String, taskTimeout: FiniteDuration, workerRegisterInterval: FiniteDuration) extends PersistentActor with ActorLogging {
   import Master._
@@ -34,11 +34,6 @@ class Master(masterId: String, taskTimeout: FiniteDuration, workerRegisterInterv
   import context.dispatcher
   private[this] val cleanupTask = context.system.scheduler.schedule(1.second, 1.second, self, CleanupTick)
 
-  private[this] def notifyWorkers(): Unit =
-    workState.getPendingConsumerGroups
-      .flatMap(workersById.getIdleWorkerRef)
-      .foreach(_ ! m2w.TaskReady)
-
   override def postStop(): Unit = cleanupTask.cancel()
 
   override def receiveRecover: Receive = {
@@ -46,6 +41,11 @@ class Master(masterId: String, taskTimeout: FiniteDuration, workerRegisterInterv
       workState = workState.updated(event)
       log.info("Replaying {}", event.getClass.getName)
   }
+
+  private[this] def notifyWorkers(): Unit =
+    workState.getPendingConsumerGroups
+      .flatMap(workersById.getIdleWorkerRef)
+      .foreach(_ ! m2w.TaskReady)
 
   override def receiveCommand: Receive = {
     case w2m.Register(workerId) =>
@@ -65,36 +65,23 @@ class Master(masterId: String, taskTimeout: FiniteDuration, workerRegisterInterv
           }
         }
 
-    case w2m.TaskFinished(workerId, taskId, r@Right(result)) =>
+    case w2m.TaskFinished(workerId, taskId, resultEither) =>
       sender() ! m2w.TaskResultChecked(taskId)
-      if (workState.isDone(taskId)) { // idempotent
-        log.warning("Previous Ack was lost, confirm again that work is done")
-      } else {
-        workState.getTaskInProgress(taskId) match {
-          case None =>
-            log.warning("Task {} not in progress, reported as done by worker {}", taskId, workerId)
-          case Some(finishedTask) =>
-            log.info("Task {} is done by worker {}", taskId, workerId)
-            workersById.idle(workerId, taskId)
-            persist(TaskCompleted(taskId, result)) { event =>
-              workState = workState.updated(event)
-              mediator ! DistributedPubSubMediator.Publish(masterId, TaskResult(finishedTask, r))
-            }
-        }
-      }
-
-    case w2m.TaskFinished(workerId, taskId, r@Left(error)) =>
-      sender() ! m2w.TaskResultChecked(taskId)
-      workState.getTaskInProgress(taskId) match {
-        case None =>
-          log.warning("Task {} is supposed to be in progress by worker {}", taskId, workerId)
-        case Some(finishedTask) =>
-          log.warning("Task {} hasn't finished because of worker {} crash {}", taskId, workerId, error)
-          workersById.idle(workerId, taskId)
-          persist(WorkerFailed(taskId)) { event =>
-            workState = workState.updated(event)
-            mediator ! DistributedPubSubMediator.Publish(masterId, TaskResult(finishedTask, r))
+      workState.getTaskInProgress(taskId).foreach { task => // idempotency - Previous Ack sent to Worker might get lost ...
+        val event =
+          resultEither match {
+            case Right(result) =>
+              log.info("Task {} is done by worker {}", taskId, workerId)
+              TaskCompleted(taskId, result)
+            case Left(error) =>
+              log.warning("Task {} hasn't finished because of worker {} crash {}", taskId, workerId, error)
+              WorkerFailed(taskId)
           }
+        persist(event) { e =>
+          workState = workState.updated(e)
+          workersById.idle(workerId, taskId)
+          mediator ! DistributedPubSubMediator.Publish(masterId, TaskResult(task, resultEither))
+        }
       }
 
     case task: Task =>

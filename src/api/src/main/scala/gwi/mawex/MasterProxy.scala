@@ -26,6 +26,9 @@ class LocalMasterProxy(masterId: String) extends Actor {
       (masterProxy ? task) map {
         case m2p.TaskAck(t) => p2c.Accepted(t)
       } recover { case _ => p2c.Rejected(task.id) } pipeTo sender()
+
+    case x =>
+      masterProxy.forward(x)
   }
 
 }
@@ -61,6 +64,9 @@ class RemoteMasterProxy(masterId: String, initialContacts: Set[ActorPath]) exten
       senderByTaskId += (task.id -> sender())
       clusterClient ! SendToAll(s"/user/$masterId/singleton", task)
       context.system.scheduler.scheduleOnce(5.seconds, self, CheckForZombieTask(task.id))
+
+    case x =>
+      clusterClient ! SendToAll(s"/user/$masterId/singleton", x)
   }
 
 }

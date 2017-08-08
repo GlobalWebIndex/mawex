@@ -217,7 +217,7 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
     "allow for scaling down" in {
       forWorkersDo((1 to 4).map(n => WorkerDef(WorkerId(n.toString, ConsumerGroup, n.toString), TestExecutor.evalProps(Some(TestExecutor.sleepEvaluation(50))))): _*) { workerRefs =>
         workerRefs.take(3).foreach { case (workerId, workerRef) =>
-          masterProxy ! w2m.UnRegister(workerId)
+          masterProxy ! w2m.CheckOut(workerId)
           workerSystem.stop(workerRef)
         }
         validateWork(1, _ => ConsumerGroup)

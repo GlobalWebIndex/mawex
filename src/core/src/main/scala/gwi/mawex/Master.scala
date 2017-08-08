@@ -11,7 +11,7 @@ import gwi.mawex.State._
 import scala.collection.mutable
 import scala.concurrent.duration._
 
-class Master(masterId: String, taskTimeout: FiniteDuration, workerRegisterInterval: FiniteDuration) extends PersistentActor with ActorLogging {
+class Master(masterId: String, taskTimeout: FiniteDuration, workerCheckinInterval: FiniteDuration) extends PersistentActor with ActorLogging {
   import Master._
   import WorkerRef._
   import context.dispatcher
@@ -56,7 +56,7 @@ class Master(masterId: String, taskTimeout: FiniteDuration, workerRegisterInterv
       notifyWorkers()
 
     case Validate =>
-      workersById.validate(workState, workerRegisterInterval, taskTimeout)
+      workersById.validate(workState, workerCheckinInterval, taskTimeout)
 
     case Cleanup =>
       workersById.findProgressingOrphanTask(workState)
@@ -70,17 +70,17 @@ class Master(masterId: String, taskTimeout: FiniteDuration, workerRegisterInterv
   }
 
   private[this] def handleWorkerCommand(cmd: Worker2MasterCommand) = cmd match {
-    case w2m.Register(workerId) =>
-      workersById.registerWorker(workerId, sender(), context)
+    case w2m.CheckIn(workerId) =>
+      workersById.checkIn(workerId, sender(), context)
 
-    case w2m.UnRegister(workerId) =>
-      log.info("UnRegistering worker {} ...", workerId)
-      workersById.unregisterWorker(workerId, context)
+    case w2m.CheckOut(workerId) =>
+      log.info("Checking out worker {} ...", workerId)
+      workersById.checkOut(workerId, context)
         .flatMap(workState.getTaskInProgress)
         .foreach { task =>
           persist(TaskFailed(task.id)) { e =>
             workState = workState.updated(e)
-            mediator ! DistributedPubSubMediator.Publish(masterId, TaskResult(task, Left(s"Worker $workerId unregistered while processing task ${task.id} ...")))
+            mediator ! DistributedPubSubMediator.Publish(masterId, TaskResult(task, Left(s"Worker $workerId checkde out while processing task ${task.id} ...")))
           }
         }
 
@@ -143,7 +143,7 @@ class Master(masterId: String, taskTimeout: FiniteDuration, workerRegisterInterv
 
     case Terminated(ref) =>
       log.info(s"Worker ${ref.path.name} is terminating ...")
-      workersById.getWorkerIdByRef(ref).foreach ( workerId => self ! w2m.UnRegister(workerId) )
+      workersById.getWorkerIdByRef(ref).foreach ( workerId => self ! w2m.CheckOut(workerId) )
 
     case x =>
       log.error(s"Received unknown message $x")
@@ -158,6 +158,6 @@ object Master {
   protected[mawex] case object Validate extends HeartBeat
   protected[mawex] case object Cleanup extends HeartBeat
 
-  def props(resultTopicName: String, taskTimeout: FiniteDuration, workerRegisterInterval: FiniteDuration = 5.seconds): Props = Props(classOf[Master], resultTopicName, taskTimeout, workerRegisterInterval)
+  def props(resultTopicName: String, taskTimeout: FiniteDuration, workerCheckinInterval: FiniteDuration = 5.seconds): Props = Props(classOf[Master], resultTopicName, taskTimeout, workerCheckinInterval)
 
 }

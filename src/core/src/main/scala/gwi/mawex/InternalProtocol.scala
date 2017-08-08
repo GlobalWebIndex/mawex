@@ -8,8 +8,8 @@ case class WorkerId(id: String, consumerGroup: String, pod: String)
 
 /** Workers => Master */
 object w2m {
-  case class Register(workerId: WorkerId) extends Worker2MasterCommand
-  case class UnRegister(workerId: WorkerId) extends Worker2MasterCommand
+  case class CheckIn(workerId: WorkerId) extends Worker2MasterCommand
+  case class CheckOut(workerId: WorkerId) extends Worker2MasterCommand
   case class TaskRequest(workerId: WorkerId) extends Worker2MasterCommand
   case class TaskFinished(workerId: WorkerId, taskId: TaskId, result: Either[String, Any]) extends Worker2MasterCommand
 }

@@ -13,7 +13,7 @@ class Worker(masterId: String, clusterClient: ActorRef, workerId: WorkerId, work
   import Worker._
   import context.dispatcher
 
-  private[this] val checkinWorker = context.system.scheduler.schedule(500.millis, checkinInterval, clusterClient, SendToAll(s"/user/$masterId/singleton", w2m.Register(workerId)))
+  private[this] val checkinWorker = context.system.scheduler.schedule(500.millis, checkinInterval, clusterClient, SendToAll(s"/user/$masterId/singleton", w2m.CheckIn(workerId)))
   private[this] val taskExecutor = context.watch(context.actorOf(workExecutorProps, "exec"))
   private[this] var currentTaskId: Option[TaskId] = None
 
@@ -36,7 +36,7 @@ class Worker(masterId: String, clusterClient: ActorRef, workerId: WorkerId, work
 
   override def postStop(): Unit = {
     // note that Master is watching for Workers but they would have to be part of the same actor system for it to work
-    sendToMaster(w2m.UnRegister(workerId))
+    sendToMaster(w2m.CheckOut(workerId))
     checkinWorker.cancel()
   }
 

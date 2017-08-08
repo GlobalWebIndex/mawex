@@ -21,10 +21,10 @@ protected[mawex] object WorkerRef {
     private[this] def changeWorkerRef(workerId: WorkerId, newRef: ActorRef): mutable.Map[WorkerId, WorkerRef] =
       adjust(workerId)(_.get.copy(ref = newRef, registrationTime = System.currentTimeMillis()))
 
-    private[this] def registerNewWorker(workerId: WorkerId, ref: ActorRef): mutable.Map[WorkerId, WorkerRef] =
+    private[this] def checkInNew(workerId: WorkerId, ref: ActorRef): mutable.Map[WorkerId, WorkerRef] =
       underlying += (workerId -> WorkerRef(ref, status = Idle, System.currentTimeMillis()))
 
-    private[this] def registerOldWorker(workerId: WorkerId): mutable.Map[WorkerId, WorkerRef] =
+    private[this] def checkInOld(workerId: WorkerId): mutable.Map[WorkerId, WorkerRef] =
       adjust(workerId)(_.get.copy(registrationTime = System.currentTimeMillis()))
 
     def getBusyWorkers(pod: String): Set[WorkerId] = underlying.collect { case (id@WorkerId(_, _, wPod), WorkerRef(_, Busy(_), _)) if wPod == pod => id }.toSet
@@ -48,9 +48,9 @@ protected[mawex] object WorkerRef {
       workState.getProgressingTasks.keySet
         .filter ( task => !underlying.exists(_._2.status == Busy(task.id)) )
 
-    def validate(workState: State, workerRegisterInterval: FiniteDuration, taskTimeout: FiniteDuration)(implicit log: LoggingAdapter): Unit = {
-      for ((workerId, WorkerRef(_, _, registrationTime)) <- underlying if (System.currentTimeMillis() - registrationTime) > workerRegisterInterval.toMillis * 6) {
-        log.warning(s"worker $workerId has not registered, context.watch doesn't work !!!")
+    def validate(workState: State, workerCheckinInterval: FiniteDuration, taskTimeout: FiniteDuration)(implicit log: LoggingAdapter): Unit = {
+      for ((workerId, WorkerRef(_, _, registrationTime)) <- underlying if (System.currentTimeMillis() - registrationTime) > workerCheckinInterval.toMillis * 6) {
+        log.warning(s"worker $workerId has not checked in, context.watch doesn't work !!!")
       }
       for ((taskId, creationTime) <- workState.getProgressingTaskIds if (System.currentTimeMillis() - creationTime) > taskTimeout.toMillis) {
         log.warning("Progressing task {} timed out, worker has not replied !!!", taskId)
@@ -63,7 +63,7 @@ protected[mawex] object WorkerRef {
     def getIdleWorkerRef(consumerGroup: String): Option[ActorRef] =
       underlying.collectFirst { case (WorkerId(_, wGroup, wPod), WorkerRef(ref, Idle, _)) if wGroup == consumerGroup && getBusyWorkers(wPod).isEmpty => ref }
 
-    def unregisterWorker(workerId: WorkerId, context: ActorContext)(implicit log: LoggingAdapter): Option[TaskId] = {
+    def checkOut(workerId: WorkerId, context: ActorContext)(implicit log: LoggingAdapter): Option[TaskId] = {
       val workerStatusOpt = underlying.get(workerId)
       val taskOpt =
         workerStatusOpt
@@ -78,20 +78,20 @@ protected[mawex] object WorkerRef {
       taskOpt
     }
 
-    def registerWorker(workerId: WorkerId, sender: ActorRef, context: ActorContext)(implicit log: LoggingAdapter): Unit = {
+    def checkIn(workerId: WorkerId, sender: ActorRef, context: ActorContext)(implicit log: LoggingAdapter): Unit = {
       val workerStatusOpt = underlying.get(workerId)
       if (workerStatusOpt.exists(_.ref != sender)) { // check for worker's ref change
         val oldWorkerStatus = workerStatusOpt.get
         context.watch(sender)
         context.unwatch(oldWorkerStatus.ref)
         changeWorkerRef(workerId, sender)
-        log.warning("Existing worker {} registered again with different ActorRef !", workerId)
+        log.warning("Existing worker {} checked in again with different ActorRef !", workerId)
       } else if (workerStatusOpt.isEmpty) {
-        log.info("Worker registered: {}", workerId)
+        log.info("Worker checked in: {}", workerId)
         context.watch(sender)
-        registerNewWorker(workerId, sender)
+        checkInNew(workerId, sender)
       } else {
-        registerOldWorker(workerId)
+        checkInOld(workerId)
       }
     }
   }

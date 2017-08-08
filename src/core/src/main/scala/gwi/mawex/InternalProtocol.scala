@@ -1,10 +1,12 @@
 package gwi.mawex
 
+import java.util.UUID
+
 sealed trait Worker2MasterCommand
 sealed trait Master2WorkerCommand
 
 /** Master <=> Worker */
-case class WorkerId(id: String, consumerGroup: String, pod: String)
+case class WorkerId(consumerGroup: String, pod: String, id: String = UUID.randomUUID().toString)
 
 /** Workers => Master */
 object w2m {

@@ -58,7 +58,7 @@ object MawexSpec {
           fnOpt match {
             case None             => Success(context.parent.path.name)
             case Some(fn) if fn() => Success(context.parent.path.name)
-            case _                => Failure(sys.error("Predicate failed !!!"))
+            case _                => Failure(new RuntimeException("Predicate failed !!!"))
           }
         sender() ! e2w.TaskExecuted(result)
     }
@@ -152,8 +152,8 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
 
   private[this] def forWorkersDo(workerSpots: WorkerDef*)(fn: Seq[(WorkerId, ActorRef)] => Unit): Unit = {
     val workerRefs =
-      workerSpots.map { case WorkerDef(workerId@WorkerId(id, group, pod), props) =>
-        workerId -> workerSystem.actorOf(Worker.props(MasterId, clusterWorkerClient, group, pod, props, 1.second, id), s"worker-$id")
+      workerSpots.map { case WorkerDef(workerId, props) =>
+        workerId -> workerSystem.actorOf(Worker.props(MasterId, clusterWorkerClient, workerId, props, 1.second, 1.second), s"worker-${workerId.id}")
       }
     Thread.sleep(100)
     try
@@ -180,7 +180,7 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
 
   "mawex should" - {
     "execute single task in single consumer group and pod" in {
-      forWorkersDo(WorkerDef(WorkerId("1", ConsumerGroup, Pod), TestExecutor.identifyProps)) { _ =>
+      forWorkersDo(WorkerDef(WorkerId(ConsumerGroup, Pod, "1"), TestExecutor.identifyProps)) { _ =>
         val taskId = TaskId("1", ConsumerGroup)
         masterProxy ! Task(taskId, 1)
         expectMsg(p2c.Accepted(taskId))
@@ -189,7 +189,7 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
     }
 
     "handle failures" in {
-      forWorkersDo((1 to 3).map( n => WorkerDef(WorkerId(n.toString, ConsumerGroup, Pod), Props[FailingExecutor])): _*) {  _ =>
+      forWorkersDo((1 to 3).map( n => WorkerDef(WorkerId(ConsumerGroup, Pod, n.toString), Props[FailingExecutor])): _*) {  _ =>
         for (n <- 2 to 20) {
           val taskId = TaskId(n.toString, ConsumerGroup)
           masterProxy ! Task(taskId, n)
@@ -202,20 +202,20 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
     }
 
     "allow for scaling out" in {
-      forWorkersDo(WorkerDef(WorkerId("1", ConsumerGroup, "1"), TestExecutor.evalProps(Some(TestExecutor.sleepEvaluation(50))))) {  _ =>
+      forWorkersDo(WorkerDef(WorkerId(ConsumerGroup, "1", "1"), TestExecutor.evalProps(Some(TestExecutor.sleepEvaluation(50))))) {  _ =>
         val taskId = TaskId("1", ConsumerGroup)
         masterProxy ! Task(taskId, 1)
         expectMsg(p2c.Accepted(taskId))
         probe.expectMsgType[TaskResult].task.id should be(TaskId("1", ConsumerGroup))
 
-        forWorkersDo(WorkerDef(WorkerId("2", ConsumerGroup, "2"), TestExecutor.evalProps(Some(TestExecutor.sleepEvaluation(50))))) {  _ =>
+        forWorkersDo(WorkerDef(WorkerId(ConsumerGroup, "2", "2"), TestExecutor.evalProps(Some(TestExecutor.sleepEvaluation(50))))) {  _ =>
           validateWork(2, _ => ConsumerGroup)
         }
       }
     }
 
     "allow for scaling down" in {
-      forWorkersDo((1 to 4).map(n => WorkerDef(WorkerId(n.toString, ConsumerGroup, n.toString), TestExecutor.evalProps(Some(TestExecutor.sleepEvaluation(50))))): _*) { workerRefs =>
+      forWorkersDo((1 to 4).map(n => WorkerDef(WorkerId(ConsumerGroup, n.toString, n.toString), TestExecutor.evalProps(Some(TestExecutor.sleepEvaluation(50))))): _*) { workerRefs =>
         workerRefs.take(3).foreach { case (workerId, workerRef) =>
           masterProxy ! w2m.CheckOut(workerId)
           workerSystem.stop(workerRef)
@@ -226,13 +226,13 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
 
     "execute tasks sequentially by having multiple consumer groups share a pod" in {
       val running = new AtomicBoolean(false)
-      forWorkersDo((1 to 3).map(n => WorkerDef(WorkerId(n.toString, n.toString, Pod), TestExecutor.evalProps(Some(TestExecutor.runningEvaluation(running, 30))))): _*) {  _ =>
+      forWorkersDo((1 to 3).map(n => WorkerDef(WorkerId(n.toString, Pod, n.toString), TestExecutor.evalProps(Some(TestExecutor.runningEvaluation(running, 30))))): _*) {  _ =>
         validateWork(3, n => ((n%3) + 1).toString)
       }
     }
 
     "load balance work to many workers sharing a consumer group" in {
-      forWorkersDo((1 to 4).map(n => WorkerDef(WorkerId(n.toString, (n%2).toString, n.toString), TestExecutor.evalProps(Some(TestExecutor.sleepEvaluation(70))))): _*) {  _ =>
+      forWorkersDo((1 to 4).map(n => WorkerDef(WorkerId((n%2).toString, n.toString, n.toString), TestExecutor.evalProps(Some(TestExecutor.sleepEvaluation(70))))): _*) {  _ =>
         validateWork(4, n => (n%2).toString)
       }
     }

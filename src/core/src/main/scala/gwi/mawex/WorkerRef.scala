@@ -27,7 +27,7 @@ protected[mawex] object WorkerRef {
     private[this] def checkInOld(workerId: WorkerId): mutable.Map[WorkerId, WorkerRef] =
       adjust(workerId)(_.get.copy(registrationTime = System.currentTimeMillis()))
 
-    def getBusyWorkers(pod: String): Set[WorkerId] = underlying.collect { case (id@WorkerId(_, _, wPod), WorkerRef(_, Busy(_), _)) if wPod == pod => id }.toSet
+    def getBusyWorkers(pod: String): Set[WorkerId] = underlying.collect { case (id@WorkerId(_, wPod, _), WorkerRef(_, Busy(_), _)) if wPod == pod => id }.toSet
 
     def employ(workerId: WorkerId, taskId: TaskId): mutable.Map[WorkerId, WorkerRef] =
       adjust(workerId)(_.get.copy(status = Busy(taskId)))
@@ -61,7 +61,7 @@ protected[mawex] object WorkerRef {
     }
 
     def getIdleWorkerRef(consumerGroup: String): Option[ActorRef] =
-      underlying.collectFirst { case (WorkerId(_, wGroup, wPod), WorkerRef(ref, Idle, _)) if wGroup == consumerGroup && getBusyWorkers(wPod).isEmpty => ref }
+      underlying.collectFirst { case (WorkerId(wGroup, wPod, _), WorkerRef(ref, Idle, _)) if wGroup == consumerGroup && getBusyWorkers(wPod).isEmpty => ref }
 
     def checkOut(workerId: WorkerId, context: ActorContext)(implicit log: LoggingAdapter): Option[TaskId] = {
       val workerStatusOpt = underlying.get(workerId)

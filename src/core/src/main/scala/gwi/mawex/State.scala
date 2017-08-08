@@ -1,30 +1,38 @@
 package gwi.mawex
 
-import scala.collection.breakOut
-
 object State {
 
-  def empty: State = State(pendingTasks = Map.empty, tasksInProgress = Map.empty, doneTaskIds = Set.empty)
+  def empty: State = State(pendingTasks = Map.empty, progressingTasks = Map.empty, doneTaskIds = Vector.empty)
 
   trait TaskDomainEvent
   case class TaskAccepted(task: Task) extends TaskDomainEvent
   case class TaskStarted(taskId: TaskId) extends TaskDomainEvent
   case class TaskCompleted(taskId: TaskId, result: Any) extends TaskDomainEvent
-  case class WorkerFailed(taskId: TaskId) extends TaskDomainEvent
+  case class TaskFailed(taskId: TaskId) extends TaskDomainEvent
+
+  implicit class VectorPimp(underlying: Vector[TaskId]) {
+    def fifo(e: TaskId, limit: Int): Vector[TaskId] = {
+      if (underlying.length < limit)
+        underlying :+ e
+      else
+        underlying.drop(1) :+ e
+    }
+  }
 
 }
 
-// TODO do something with State#doneTaskIds, the set will grow indefinitely which is not good for a use case with millions of tasks
-
-case class State private(private val pendingTasks: Map[Task, Long], private val tasksInProgress: Map[TaskId, Task], private val doneTaskIds: Set[TaskId]) {
+case class State private(private val pendingTasks: Map[Task, Long], private val progressingTasks: Map[Task, Long], private val doneTaskIds: Vector[TaskId]) {
   import State._
 
-  def getPendingTasks: Set[Task] = pendingTasks.keySet
-  def getPendingConsumerGroups: Set[String] = pendingTasks.map(_._1.id.consumerGroup)(breakOut)
-  def getAcceptedTasks: Map[TaskId, Long] = pendingTasks.map { case (task, ts) => task.id -> ts }
+  private[this] val DoneTasksLimit = 1000
+
+  def getPendingTasks: Map[Task, Long] = pendingTasks
+  def getProgressingTasks: Map[Task, Long] = progressingTasks
+  def getPendingTaskIds: Map[TaskId, Long] = pendingTasks.map { case (task, ts) => task.id -> ts }
+  def getProgressingTaskIds: Map[TaskId, Long] = progressingTasks.map { case (task, ts) => task.id -> ts }
   def isAccepted(taskId: TaskId): Boolean = pendingTasks.exists(_._1.id == taskId)
-  def getTaskInProgress(taskId: TaskId): Option[Task] = tasksInProgress.get(taskId)
-  def isDone(taskId: TaskId): Boolean = doneTaskIds.contains(taskId)
+  def getTaskInProgress(taskId: TaskId): Option[Task] = progressingTasks.keySet.find(_.id == taskId)
+  def getDoneTaskIds: Vector[TaskId] = doneTaskIds
 
   def updated(event: TaskDomainEvent): State = event match {
     case TaskAccepted(task) =>
@@ -33,13 +41,15 @@ case class State private(private val pendingTasks: Map[Task, Long], private val 
     case TaskStarted(taskId) =>
       val task = pendingTasks.find(_._1.id == taskId).map(_._1).getOrElse(throw new IllegalStateException("Very unexpectedly, accepted task is missing !!!"))
       val rest = pendingTasks.filter(_._1.id != taskId)
-      copy(pendingTasks = rest, tasksInProgress = tasksInProgress + (task.id -> task))
+      copy(pendingTasks = rest, progressingTasks = progressingTasks + (task -> System.currentTimeMillis()))
 
     case TaskCompleted(taskId, _) =>
-      copy(tasksInProgress = tasksInProgress - taskId, doneTaskIds = doneTaskIds + taskId)
+      val task = getTaskInProgress(taskId).getOrElse(throw new IllegalStateException("Very unexpectedly, progressing task is missing to complete !!!"))
+      copy(progressingTasks = progressingTasks - task, doneTaskIds = doneTaskIds.fifo(taskId, DoneTasksLimit))
 
-    case WorkerFailed(taskId) =>
-      copy(tasksInProgress = tasksInProgress - taskId, doneTaskIds = doneTaskIds + taskId)
+    case TaskFailed(taskId) =>
+      val task = getTaskInProgress(taskId).getOrElse(throw new IllegalStateException("Very unexpectedly, progressing task is missing to fail !!!"))
+      copy(progressingTasks = progressingTasks - task, doneTaskIds = doneTaskIds.fifo(taskId, DoneTasksLimit))
 
   }
 }

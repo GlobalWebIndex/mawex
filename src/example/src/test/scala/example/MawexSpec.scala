@@ -1,6 +1,8 @@
 package example
 
-import akka.actor.{Actor, ActorSystem, Props, RootActorPath}
+import java.util.concurrent.atomic.AtomicBoolean
+
+import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, Props, RootActorPath, UnhandledMessage}
 import akka.cluster.Cluster
 import akka.cluster.ClusterEvent.{InitialStateAsEvents, MemberUp}
 import akka.cluster.client.{ClusterClient, ClusterClientSettings}
@@ -10,15 +12,18 @@ import akka.testkit.{ImplicitSender, TestKit, TestProbe}
 import com.typesafe.config.ConfigFactory
 import gwi.mawex.Service.Address
 import gwi.mawex._
-import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
+import org.scalatest.{BeforeAndAfterAll, FreeSpecLike, Matchers}
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
-import scala.util.{Failure, Random, Success, Try}
+import scala.util.{Failure, Success, Try}
 
 object MawexSpec {
 
-  val workerConfig = ConfigFactory.parseString("""
+  case class WorkerDef(id: WorkerId, executorProps: Props)
+
+  val workerConfig = ConfigFactory.parseString(
+    """
     akka {
       actor{
          provider = remote
@@ -30,46 +35,77 @@ object MawexSpec {
   ).withFallback(ConfigFactory.load("serialization"))
     .withFallback(ConfigFactory.load())
 
-
   import scala.language.implicitConversions
   implicit def eitherToTry[B](either: Either[String, B]): Try[B] = {
     either match {
       case Right(obj) => Success(obj)
       case Left(err) => Failure(new RuntimeException(err))
-
     }
   }
 
-  class FlakyWorkExecutor extends Actor {
-    var i = 0
-
-    override def postRestart(reason: Throwable): Unit = {
-      i = 3
-      super.postRestart(reason)
-    }
-
+  class FailingExecutor extends Actor {
     def receive = {
       case n: Int =>
-        i += 1
-        if (i == 3) throw new RuntimeException("Flaky worker")
-        if (i == 5) context.stop(self)
+        if (n == 3) throw new RuntimeException("Failing executor crashed !!!")
+        val result = if (n == 4) Failure(new RuntimeException("Failing executor's task crashed !!!")) else Success(context.parent.path.name)
+        sender() ! e2w.TaskExecuted(result)
+    }
+  }
+  class TestExecutor(fnOpt: Option[() => Boolean] = Option.empty) extends Actor {
+    def receive = {
+      case _ =>
+        val result =
+          fnOpt match {
+            case None             => Success(context.parent.path.name)
+            case Some(fn) if fn() => Success(context.parent.path.name)
+            case _                => Failure(sys.error("Predicate failed !!!"))
+          }
+        sender() ! e2w.TaskExecuted(result)
+    }
+  }
 
-        val n2 = n * n
-        val result = s"$n * $n = $n2"
-        sender() ! e2w.TaskExecuted(Success(result))
+  object TestExecutor {
+    def evalProps(fnOpt: Option[() => Boolean]) = Props(classOf[TestExecutor], fnOpt)
+    def identifyProps = Props(classOf[TestExecutor], Option.empty)
+
+    def runningEvaluation(running: AtomicBoolean, sleep: Int): () => Boolean =
+      () => {
+        val wasRunning = running.getAndSet(true)
+        Thread.sleep(sleep)
+        running.set(false)
+        !wasRunning
+      }
+
+    def sleepEvaluation(sleep: Int): () => Boolean =
+      () => {
+        Thread.sleep(sleep)
+        true
+      }
+  }
+
+  class UnhandledMessageListener extends Actor with ActorLogging {
+
+    override def receive = {
+      case message: UnhandledMessage =>
+        log.error(s"CRITICAL!!! No actors found for message ${message.getMessage}")
+        context.system.terminate()
     }
   }
 }
 
-class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSupport with Matchers with FlatSpecLike with BeforeAndAfterAll with ImplicitSender {
+class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSupport with Matchers with FreeSpecLike with BeforeAndAfterAll with ImplicitSender {
   import MawexSpec._
 
   def this() = this(Service.buildClusterSystem(Address("localhost", 6379), "foo", Address("localhost", 0), List.empty, 1))
+
   private[this] val workerSystem = ActorSystem("ClusterSystem", workerConfig)
   private[this] val ConsumerGroup = "default"
+  private[this] val Pod = "default"
   private[this] val MasterId = "master"
 
   override def beforeAll(): Unit = try super.beforeAll() finally {
+    system.eventStream.subscribe(system.actorOf(Props(new UnhandledMessageListener())), classOf[UnhandledMessage])
+    system.eventStream.subscribe(workerSystem.actorOf(Props(new UnhandledMessageListener())), classOf[UnhandledMessage])
     startContainer("redis", "redis-test", 6379)(())
     Service.backendSingletonActorRef(1.second, system, MasterId)()
   }
@@ -94,20 +130,11 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
 
     val initialContacts = Set(RootActorPath(backendClusterAddress) / "system" / "receptionist")
     val clusterWorkerClient = workerSystem.actorOf(ClusterClient.props(ClusterClientSettings(workerSystem).withInitialContacts(initialContacts)), "clusterWorkerClient")
-    for (n <- 1 to 3)
-      workerSystem.actorOf(Worker.props(MasterId, clusterWorkerClient, ConsumerGroup, Props(classOf[IdentityExecutor], Seq.empty), 1.second), "worker-" + n)
-    workerSystem.actorOf(Worker.props(MasterId, clusterWorkerClient, ConsumerGroup, Props[FlakyWorkExecutor], 1.second), "flaky-worker")
 
-    val masterProxy = system.actorOf(RemoteMasterProxy.props(MasterId, initialContacts), "remoteMasterProxy")
+    val masterProxy = system.actorOf(LocalMasterProxy.props(MasterId), "remoteMasterProxy")
 
-    clusterWorkerClient -> masterProxy
-  }
-
-  "Distributed workers" should "perform work and publish results" in {
-    val (clusterWorkerClient, masterProxy) = initSystems
-
-    val results = TestProbe()
-    DistributedPubSub(system).mediator ! Subscribe(MasterId, results.ref)
+    val probe = TestProbe()
+    DistributedPubSub(system).mediator ! Subscribe(MasterId, probe.ref)
     expectMsgType[SubscribeAck]
 
     // make sure pub sub topics are replicated over to the backend system before triggering any work
@@ -118,42 +145,96 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
       }
     }
 
-    // make sure we can get one piece of work through to fail fast if it doesn't
-    within(10.seconds) {
-      awaitAssert {
+    (clusterWorkerClient, masterProxy, probe)
+  }
+
+  lazy val (clusterWorkerClient, masterProxy, probe) = initSystems
+
+  private[this] def forWorkersDo(workerSpots: WorkerDef*)(fn: Seq[(WorkerId, ActorRef)] => Unit): Unit = {
+    val workerRefs =
+      workerSpots.map { case WorkerDef(workerId@WorkerId(id, group, pod), props) =>
+        workerId -> workerSystem.actorOf(Worker.props(MasterId, clusterWorkerClient, group, pod, props, 1.second, id), s"worker-$id")
+      }
+    Thread.sleep(100)
+    try
+      fn(workerRefs)
+    finally {
+      workerRefs.map(_._2).foreach(workerSystem.stop)
+      Thread.sleep(100)
+    }
+  }
+
+  private[this] def receiveResults(n: Int) = probe.receiveN(n, 5.seconds).map { case r: TaskResult => r }.partition(_.result.isSuccess)
+
+  private[this] def validateWork(refSize: Int, genTaskGroup: Int => String) = {
+    for (n <- 201 to 230) {
+      val taskId = TaskId(n.toString, genTaskGroup(n))
+      masterProxy ! Task(taskId, n)
+      expectMsg(p2c.Accepted(taskId))
+    }
+    val (successes, failures) = receiveResults(30)
+    assert(failures.isEmpty)
+    successes.toVector.map(_.task.id.id.toInt).toSet should be((201 to 230).toSet)
+    assert(successes.map(_.result.get.asInstanceOf[String]).toSet.size == refSize)
+  }
+
+  "mawex should" - {
+    "execute single task in single consumer group and pod" in {
+      forWorkersDo(WorkerDef(WorkerId("1", ConsumerGroup, Pod), TestExecutor.identifyProps)) { _ =>
         val taskId = TaskId("1", ConsumerGroup)
         masterProxy ! Task(taskId, 1)
         expectMsg(p2c.Accepted(taskId))
+        probe.expectMsgType[TaskResult].task.id should be(TaskId("1", ConsumerGroup))
       }
     }
-    results.expectMsgType[TaskResult].task.id should be(TaskId("1", ConsumerGroup))
 
-    // and then send in some actual work
-    for (n <- 2 to 100) {
-      val taskId = TaskId(n.toString, ConsumerGroup)
-      masterProxy ! Task(taskId, n)
-      expectMsg(p2c.Accepted(taskId))
+    "handle failures" in {
+      forWorkersDo((1 to 3).map( n => WorkerDef(WorkerId(n.toString, ConsumerGroup, Pod), Props[FailingExecutor])): _*) {  _ =>
+        for (n <- 2 to 20) {
+          val taskId = TaskId(n.toString, ConsumerGroup)
+          masterProxy ! Task(taskId, n)
+          expectMsg(p2c.Accepted(taskId))
+        }
+        val (successes, failures) = receiveResults(19)
+        assert(failures.size == 2)
+        assert(successes.size == 17)
+      }
     }
 
-    results.within(10.seconds) {
-      val (successes, failures) = results.receiveN(99).map { case TaskResult(task, result) => result.map(_ => task) }.partition(_.isSuccess)
-      // nothing lost, and no duplicates
-      assert(failures.size == 1)
-      assert(successes.size == 98)
+    "allow for scaling out" in {
+      forWorkersDo(WorkerDef(WorkerId("1", ConsumerGroup, "1"), TestExecutor.evalProps(Some(TestExecutor.sleepEvaluation(50))))) {  _ =>
+        val taskId = TaskId("1", ConsumerGroup)
+        masterProxy ! Task(taskId, 1)
+        expectMsg(p2c.Accepted(taskId))
+        probe.expectMsgType[TaskResult].task.id should be(TaskId("1", ConsumerGroup))
+
+        forWorkersDo(WorkerDef(WorkerId("2", ConsumerGroup, "2"), TestExecutor.evalProps(Some(TestExecutor.sleepEvaluation(50))))) {  _ =>
+          validateWork(2, _ => ConsumerGroup)
+        }
+      }
     }
 
-    // consumer groups
-    for (n <- 4 to 10)
-      workerSystem.actorOf(Worker.props(MasterId, clusterWorkerClient, n.toString, Props(classOf[IdentityExecutor], Seq.empty), 1.second), "worker-" + n)
-    for (n <- 201 to 300) {
-      val taskId = TaskId(n.toString, Random.shuffle(4 to 10).head.toString)
-      masterProxy ! Task(taskId, n)
-      expectMsg(p2c.Accepted(taskId))
+    "allow for scaling down" in {
+      forWorkersDo((1 to 4).map(n => WorkerDef(WorkerId(n.toString, ConsumerGroup, n.toString), TestExecutor.evalProps(Some(TestExecutor.sleepEvaluation(50))))): _*) { workerRefs =>
+        workerRefs.take(3).foreach { case (workerId, workerRef) =>
+          masterProxy ! w2m.UnRegister(workerId)
+          workerSystem.stop(workerRef)
+        }
+        validateWork(1, _ => ConsumerGroup)
+      }
     }
-    results.within(10.seconds) {
-      val (successIds, failures) = results.receiveN(100).map { case TaskResult(task, result) => result.map(_ => task) }.partition(_.isSuccess)
-      successIds.toVector.map(_.get.id.id.toInt).sorted should be((201 to 300).toVector)
-      assert(failures.isEmpty)
+
+    "execute tasks sequentially by having multiple consumer groups share a pod" in {
+      val running = new AtomicBoolean(false)
+      forWorkersDo((1 to 3).map(n => WorkerDef(WorkerId(n.toString, n.toString, Pod), TestExecutor.evalProps(Some(TestExecutor.runningEvaluation(running, 30))))): _*) {  _ =>
+        validateWork(3, n => ((n%3) + 1).toString)
+      }
+    }
+
+    "load balance work to many workers sharing a consumer group" in {
+      forWorkersDo((1 to 4).map(n => WorkerDef(WorkerId(n.toString, (n%2).toString, n.toString), TestExecutor.evalProps(Some(TestExecutor.sleepEvaluation(70))))): _*) {  _ =>
+        validateWork(4, n => (n%2).toString)
+      }
     }
 
   }

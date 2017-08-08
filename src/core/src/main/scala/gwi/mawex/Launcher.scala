@@ -114,7 +114,7 @@ object Service {
         .withFallback(ConfigFactory.load())
     )
 
-  def workerActorRef(masterId: String, contactPoints: List[Address], consumerGroup: String, executorClazz: Class[_], executorArgs: Seq[String], system: ActorSystem)(arf: ActorRefFactory = system): ActorRef = {
+  def workerActorRef(masterId: String, contactPoints: List[Address], consumerGroup: String, pod: String, executorClazz: Class[_], executorArgs: Seq[String], system: ActorSystem)(arf: ActorRefFactory = system): ActorRef = {
     val initialContacts =
       contactPoints
         .map { case Address(host, port) => s"akka.tcp://ClusterSystem@$host:$port" }
@@ -122,7 +122,7 @@ object Service {
         .toSet
 
     val clusterClient = arf.actorOf(ClusterClient.props(ClusterClientSettings(system).withInitialContacts(initialContacts)), "clusterClient")
-    arf.actorOf(Worker.props(masterId, clusterClient, consumerGroup, Props(executorClazz, executorArgs)), "worker")
+    arf.actorOf(Worker.props(masterId, clusterClient, consumerGroup, pod, Props(executorClazz, executorArgs)), "worker")
   }
 
 }
@@ -165,6 +165,7 @@ object WorkerCmd extends Command(name = "workers", description = "launches worke
   import Service._
 
   var consumerGroups  = opt[List[String]](default = List("default"), description = "sum,sum,add,add,add,divide - 6 workers in 3 consumer groups")
+  var pod             = opt[String](default = "default", description = "Workers within the same pod are executing sequentially")
   var executorClass   = arg[String](required = true, name="executor-class", description = "Full class name of executor Actor, otherwise identity ping/pong executor will be used")
   var executorArgs    = arg[Option[String]](required = false, name="executor-args", description = "Arguments to be passed to forked executor jvm process")
   var masterId        = opt[String](default = "master", name="master-id")
@@ -172,7 +173,7 @@ object WorkerCmd extends Command(name = "workers", description = "launches worke
   def run() =
     consumerGroups.foreach { consumerGroup =>
       val system = buildWorkerSystem(hostAddress)
-      workerActorRef(masterId, seedNodes, consumerGroup, Class.forName(executorClass), executorArgs.map(_.split(" ").filter(_.nonEmpty).toSeq).getOrElse(Seq.empty), system)()
+      workerActorRef(masterId, seedNodes, consumerGroup, pod, Class.forName(executorClass), executorArgs.map(_.split(" ").filter(_.nonEmpty).toSeq).getOrElse(Seq.empty), system)()
     }
 
 }

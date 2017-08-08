@@ -16,6 +16,7 @@ class Producer(masterProxy: ActorRef) extends Actor with ActorLogging {
   import Producer._
   import context.dispatcher
   val ConsumerGroup = "default"
+  val Pod = "default"
   def scheduler = context.system.scheduler
   def rnd = ThreadLocalRandom.current
   def nextTaskId(): TaskId = TaskId(UUID.randomUUID().toString, ConsumerGroup)

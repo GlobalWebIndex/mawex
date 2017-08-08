@@ -2,48 +2,52 @@ package gwi.mawex
 
 import java.util.UUID
 
-import akka.actor.SupervisorStrategy.{Restart, Stop}
+import akka.actor.SupervisorStrategy.{Resume, Stop}
 import akka.actor._
 import akka.cluster.client.ClusterClient.SendToAll
 
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
-class Worker(masterId: String, clusterClient: ActorRef, consumerGroup: String, workExecutorProps: Props, registerInterval: FiniteDuration) extends Actor with ActorLogging {
+class Worker(masterId: String, clusterClient: ActorRef, workerId: WorkerId, workExecutorProps: Props, checkinInterval: FiniteDuration) extends Actor with ActorLogging {
   import Worker._
-
   import context.dispatcher
 
-  private[this] val workerId = WorkerId(UUID.randomUUID().toString, consumerGroup)
-  private[this] val registerWorker = context.system.scheduler.schedule(500.millis, registerInterval, clusterClient, SendToAll(s"/user/$masterId/singleton", w2m.Register(workerId)))
+  private[this] val checkinWorker = context.system.scheduler.schedule(500.millis, checkinInterval, clusterClient, SendToAll(s"/user/$masterId/singleton", w2m.Register(workerId)))
   private[this] val taskExecutor = context.watch(context.actorOf(workExecutorProps, "exec"))
   private[this] var currentTaskId: Option[TaskId] = None
 
-  def taskId: TaskId = currentTaskId match {
+  private[this] def taskId: TaskId = currentTaskId match {
     case Some(taskId) => taskId
     case None         => throw new IllegalStateException("Not working")
   }
+
+  private[this] def sendToMaster(msg: Any): Unit = clusterClient ! SendToAll(s"/user/$masterId/singleton", msg)
 
   override def supervisorStrategy = OneForOneStrategy() {
     case _: ActorInitializationException => Stop
     case _: DeathPactException           => Stop
     case ex: Exception =>
       log.error(ex, "Executor crashed !!!")
-      currentTaskId foreach { taskId => sendToMaster(w2m.TaskFinished(workerId, taskId, Left(ex.getMessage))) }
-      context.become(idle)
-      Restart
+      currentTaskId.foreach { taskId => sendToMaster(w2m.TaskFinished(workerId, taskId, Left(ex.getMessage))) }
+      context.become(waitingForAck(Failure(ex)))
+      Resume
   }
 
-  override def postStop(): Unit = registerWorker.cancel()
+  override def postStop(): Unit = {
+    // note that Master is watching for Workers but they would have to be part of the same actor system for it to work
+    sendToMaster(w2m.UnRegister(workerId))
+    checkinWorker.cancel()
+  }
 
-  def receive = idle
+  def receive: Receive = idle
 
   def idle: Receive = {
     case m2w.TaskReady =>
       sendToMaster(w2m.TaskRequest(workerId))
 
-    case Task(id, job) =>
-      log.info("Got task: {}", job)
+    case task@Task(id, job) =>
+      log.info("Got task: {}", task)
       currentTaskId = Some(id)
       taskExecutor ! job
       context.become(working)
@@ -51,33 +55,25 @@ class Worker(masterId: String, clusterClient: ActorRef, consumerGroup: String, w
 
   def working: Receive = {
     case e2w.TaskExecuted(result) =>
-      log.info("Task is complete. Result {}.", result)
+      log.info("Task is complete. Result {}", result)
       sendToMaster(w2m.TaskFinished(workerId, taskId, result))
       context.setReceiveTimeout(5.seconds)
-      context.become(waitForWorkIsDoneAck(result))
-
-    case _: Task =>
-      log.warning("Yikes. Master told me to do work, while I'm working.")
+      context.become(waitingForAck(result))
   }
 
-  def waitForWorkIsDoneAck(result: Try[Any]): Receive = {
-    case m2w.TaskResultChecked(id) if id == taskId =>
+  def waitingForAck(result: Try[Any]): Receive = {
+    case m2w.TaskResultAck(id) if id == taskId =>
       sendToMaster(w2m.TaskRequest(workerId))
       context.setReceiveTimeout(Duration.Undefined)
       context.become(idle)
     case ReceiveTimeout =>
-      log.info("No ack from master, retrying")
+      log.info("No ack to Worker from Master, retrying")
       sendToMaster(w2m.TaskFinished(workerId, taskId, result))
   }
 
   override def unhandled(message: Any): Unit = message match {
     case Terminated(`taskExecutor`) => context.stop(self)
-    case m2w.TaskReady              => log.warning("TaskIsReady unhandled !")
     case _                          => super.unhandled(message)
-  }
-
-  def sendToMaster(msg: Any): Unit = {
-    clusterClient ! SendToAll(s"/user/$masterId/singleton", msg)
   }
 
 }
@@ -92,6 +88,6 @@ object Worker {
     }
   }
 
-  def props(masterId: String, clusterClient: ActorRef, consumerGroup: String, executorProps: Props, registerInterval: FiniteDuration = 5.seconds): Props =
-    Props(classOf[Worker], masterId, clusterClient, consumerGroup, executorProps, registerInterval)
+  def props(masterId: String, clusterClient: ActorRef, consumerGroup: String, pod: String, executorProps: Props, checkinInterval: FiniteDuration = 5.seconds, workerId: String = UUID.randomUUID().toString): Props =
+    Props(classOf[Worker], masterId, clusterClient, WorkerId(workerId.toString, consumerGroup, pod), executorProps, checkinInterval)
 }

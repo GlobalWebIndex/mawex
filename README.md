@@ -16,27 +16,27 @@
 | +------------------+ +------------------+ +------------------+ +------------------+ |
 +-------------------------------------------------------------------------------------+
 
-  +----------------------+                +----------+         +----------------------+
-  |   Pod y1 m4.xlarge   |                |Master    |         |   Pod y2 m4.xlarge   |
-  | +------------------+ |             +-----------+ |         | +------------------+ |
-  | | Consumer Group A | |             |Master     | |         | | Consumer Group A | |
-  | | +--------------+ | |           +-----------+ | |         | | +--------------+ | |
-  | | | Worker       | | |    Task B |Master     | | | Task A  | | | Worker       | | |
-  | | |  +--------+  | | |   +-------+           | | +-----------> |  +--------+  | | |
-  | | |  |Executor|  | | |   |       |           | +-+         | | |  |Executor|  | | |
-  | | |  +--------+  | | |   |       |           +-+           | | |  +--------+  | | |
-  | | +--------------+ | |   |   +---+---------^-+             | | +--------------+ | |
-  | +------------------+ |   |   |             |               | +------------------+ |
-  | +------------------+ |   |  +v-----------+ |               | +------------------+ |
-  | | Consumer Group B | |   |  |            | |               | | Consumer Group B | |
-  | | +--------------+ | |   |  |Result Topic| |               | | +--------------+ | |
-  | | | Worker       | | |   |  |            | |               | | | Worker       | | |
-  | | |  +--------+  | <-----+  +----+-------+ |               | | |  +--------+  | | |
-  | | |  |Executor|  | | |           |         |               | | |  |Executor|  | | |
-  | | |  +--------+  | | |           |    +----+---+           | | |  +--------+  | | |
-  | | +--------------+ | |           |    |        |           | | +--------------+ | |
-  | +------------------+ |           +----> Client |           | +------------------+ |
-  +----------------------+                |        |           +----------------------+
++----------------------+                  +----------+         +----------------------+
+|   Pod y1 m4.xlarge   |                  |Master    |         |   Pod y2 m4.xlarge   |
+| +------------------+ |               +-----------+ |         | +------------------+ |
+| | Consumer Group A | |               |Master     | |         | | Consumer Group A | |
+| | +--------------+ | |             +-----------+ | |         | | +--------------+ | |
+| | | Worker       | | |    Task B   |Master     | | | Task A  | | | Worker       | | |
+| | |  +--------+  | | |     +-------+           | | +-----------> |  +--------+  | | |
+| | |  |Executor|  | | |     |       | Singleton | +-+         | | |  |Executor|  | | |
+| | |  +--------+  | | |     |       |           +-+           | | |  +--------+  | | |
+| | +--------------+ | |     |   +---+---------^-+             | | +--------------+ | |
+| +------------------+ |     |   |             |               | +------------------+ |
+| +------------------+ |     |  +v-----------+ |               | +------------------+ |
+| | Consumer Group B | |     |  |            | |               | | Consumer Group B | |
+| | +--------------+ | |     |  |Result Topic| |               | | +--------------+ | |
+| | | Worker       | | |     |  |            | |               | | | Worker       | | |
+| | |  +--------+  | <-------+  +----+-------+ |               | | |  +--------+  | | |
+| | |  |Executor|  | | |             |         |               | | |  |Executor|  | | |
+| | |  +--------+  | | |             |    +----+---+           | | |  +--------+  | | |
+| | +--------------+ | |             |    |        |           | | +--------------+ | |
+| +------------------+ |             +----> Client |           | +------------------+ |
++----------------------+                  |        |           +----------------------+
                                           +--------+
 
 +-------------------------------------------------------------------------------------+
@@ -57,9 +57,13 @@ Lightweight library for distributed task scheduling based on Master Worker Execu
 
 System is designed for :
  1. redundancy
-    - Consumer Groups - one of a kind should be always present at least on 2 machines
+    - Consumer Groups
+        - workers that belong to the same group are pulling tasks that belong to that group
+        - one group of a kind should be always present at least on 2 machines
+ 2. high availability
     - Master is a Akka cluster Singleton and persistent actor :
-        - when one instance crashes another one takes over, work state would replay in case of a crash, use at least 3 nodes
+        - when one instance crashes another one takes over, work state would replay in case of a crash
+        - use at least 3 nodes
  2. both horizontal and vertical scalability so that one can :
     - add more workers on the fly if tasks start coming more frequently
     - switch to bigger pods if workers need more resources, memory especially

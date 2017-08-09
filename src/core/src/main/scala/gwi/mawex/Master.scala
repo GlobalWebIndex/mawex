@@ -31,12 +31,10 @@ class Master(masterId: String, taskTimeout: FiniteDuration, workerCheckinInterva
   private[this] val workersById = mutable.Map[WorkerId, WorkerRef]() // not event sourced
   private[this] var workState = State.empty // event sourced
 
-  private[this] val notifyTask = context.system.scheduler.schedule(500.millis, 500.millis, self, Notify)
   private[this] val validateTask = context.system.scheduler.schedule(5.second, 3.seconds, self, Validate)
   private[this] val cleanupTask = context.system.scheduler.schedule(5.second, 5.seconds, self, Cleanup)
 
   override def postStop(): Unit = {
-    notifyTask.cancel()
     validateTask.cancel()
     cleanupTask.cancel()
   }
@@ -53,9 +51,6 @@ class Master(masterId: String, taskTimeout: FiniteDuration, workerCheckinInterva
       .foreach(_ ! m2w.TaskReady)
 
   private[this] def handleHeartBeat(heartBeat: HeartBeat) = heartBeat match {
-    case Notify =>
-      notifyWorkers()
-
     case Validate =>
       workersById.validate(workState, workerCheckinInterval, taskTimeout)
 
@@ -72,7 +67,7 @@ class Master(masterId: String, taskTimeout: FiniteDuration, workerCheckinInterva
 
   private[this] def handleWorkerCommand(cmd: Worker2MasterCommand) = cmd match {
     case w2m.CheckIn(workerId) =>
-      workersById.checkIn(workerId, sender(), context)
+      workersById.checkIn(workerId, sender(), context).foreach( _ => notifyWorkers() )
 
     case w2m.CheckOut(workerId) =>
       log.info("Checking out worker {} ...", workerId)
@@ -81,7 +76,8 @@ class Master(masterId: String, taskTimeout: FiniteDuration, workerCheckinInterva
         .foreach { task =>
           persist(TaskFailed(task.id)) { e =>
             workState = workState.updated(e)
-            mediator ! DistributedPubSubMediator.Publish(masterId, TaskResult(task, Left(s"Worker $workerId checkde out while processing task ${task.id} ...")))
+            notifyWorkers()
+            mediator ! DistributedPubSubMediator.Publish(masterId, TaskResult(task, Left(s"Worker $workerId checked out while processing task ${task.id} ...")))
           }
         }
 
@@ -103,8 +99,8 @@ class Master(masterId: String, taskTimeout: FiniteDuration, workerCheckinInterva
       }
 
     case w2m.TaskFinished(workerId, taskId, resultEither) =>
-      sender() ! m2w.TaskResultAck(taskId)
-      workState.getTaskInProgress(taskId).foreach { task => // idempotency - Previous Ack sent to Worker might get lost ...
+      val s = sender()
+      workState.getTaskInProgress(taskId).foreach { task =>
         val event =
           resultEither match {
             case Right(result) =>
@@ -117,7 +113,9 @@ class Master(masterId: String, taskTimeout: FiniteDuration, workerCheckinInterva
         persist(event) { e =>
           workState = workState.updated(e)
           workersById.idle(workerId, taskId)
+          notifyWorkers()
           mediator ! DistributedPubSubMediator.Publish(masterId, TaskResult(task, resultEither))
+          s ! m2w.TaskResultAck(taskId)
         }
       }
     }
@@ -158,7 +156,6 @@ class Master(masterId: String, taskTimeout: FiniteDuration, workerCheckinInterva
 object Master {
 
   protected[mawex] sealed trait HeartBeat
-  protected[mawex] case object Notify extends HeartBeat
   protected[mawex] case object Validate extends HeartBeat
   protected[mawex] case object Cleanup extends HeartBeat
 

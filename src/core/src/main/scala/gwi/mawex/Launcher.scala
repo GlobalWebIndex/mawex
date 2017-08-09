@@ -8,6 +8,7 @@ import org.backuity.clist._
 import org.backuity.clist.util.Read
 
 import scala.collection.JavaConverters._
+import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.Success
 
@@ -153,10 +154,11 @@ object MasterCmd extends Command(name = "master", description = "launches master
   var redisAddress = arg[Address](required = true, name="redis-address", description = "host:port of redis")
   var masterId     = opt[String](default = "master", name="master-id")
 
-  def run() = {
+  def run(): Unit = {
     val redisPassword = sys.env.getOrElse("REDIS_PASSWORD", throw new IllegalArgumentException("REDIS_PASSWORD env var must defined !!!"))
     val system = buildClusterSystem(redisAddress, redisPassword, hostAddress, seedNodes, seedNodes.size)
     backendSingletonActorRef(taskTimeout.seconds, system, masterId)()
+    sys.addShutdownHook(Await.result(system.terminate(), 10.seconds))
   }
 
 }
@@ -171,11 +173,13 @@ object WorkerCmd extends Command(name = "workers", description = "launches worke
   var masterId        = opt[String](default = "master", name="master-id")
   var taskTimeout     = opt[Int](default = 60*60, description = "timeout for a task in seconds")
 
-  def run() =
+  def run(): Unit = {
+    val system = buildWorkerSystem(hostAddress)
     consumerGroups.foreach { consumerGroup =>
-      val system = buildWorkerSystem(hostAddress)
       workerActorRef(masterId, seedNodes, WorkerId(consumerGroup, pod), taskTimeout.seconds, Class.forName(executorClass), executorArgs.map(_.split(" ").filter(_.nonEmpty).toSeq).getOrElse(Seq.empty), system)()
     }
+    sys.addShutdownHook(Await.result(system.terminate(), 10.seconds))
+  }
 
 }
 

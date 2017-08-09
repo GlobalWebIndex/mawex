@@ -15,6 +15,7 @@ class Master(masterId: String, taskTimeout: FiniteDuration, workerCheckinInterva
   import Master._
   import WorkerRef._
   import context.dispatcher
+  import w2m._
 
   private[this] implicit val logger: LoggingAdapter = log
 
@@ -87,7 +88,7 @@ class Master(masterId: String, taskTimeout: FiniteDuration, workerCheckinInterva
     case w2m.TaskRequest(workerId) =>
       if (workersById.getBusyWorkers(workerId.pod).isEmpty) {
         val s = sender()
-        workState.getPendingTasks.keySet
+        workState.getPendingTasks.toSeq.sortBy(_._2).map(_._1)
           .find(_.id.consumerGroup == workerId.consumerGroup)
           .foreach { task =>
             workersById.get(workerId).filter(_.status == Idle).foreach { _ =>
@@ -140,6 +141,9 @@ class Master(masterId: String, taskTimeout: FiniteDuration, workerCheckinInterva
           notifyWorkers()
         }
       }
+
+    case GetMawexState =>
+      sender() ! MawexState(workState, workersById.toMap)
 
     case Terminated(ref) =>
       log.info(s"Worker ${ref.path.name} is terminating ...")

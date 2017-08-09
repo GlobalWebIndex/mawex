@@ -35,4 +35,4 @@ services:
         depends_on:
             - master-a
             - master-b
-        command: workers --host-address=workers:0 --seed-nodes=master-a:2552,master-b:2551 example.Executor
+        command: workers --host-address=workers:0 --seed-nodes=master-a:2552,master-b:2551 gwi.mawex.ExampleExecutor

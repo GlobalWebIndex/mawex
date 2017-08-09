@@ -1,9 +1,8 @@
-package example
+package gwi.mawex
 
 import akka.actor.{ActorSystem, AddressFromURIString, Props, RootActorPath}
 import akka.cluster.Cluster
 import com.typesafe.config.ConfigFactory
-import gwi.mawex.RemoteMasterProxy
 import gwi.mawex.Service.Address
 
 object Client {

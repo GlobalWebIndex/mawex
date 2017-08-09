@@ -1,8 +1,7 @@
-package example
+package gwi.mawex
 
 import akka.actor.{Actor, ActorLogging}
 import akka.cluster.pubsub.{DistributedPubSub, DistributedPubSubMediator}
-import gwi.mawex._
 
 class Consumer extends Actor with ActorLogging {
 

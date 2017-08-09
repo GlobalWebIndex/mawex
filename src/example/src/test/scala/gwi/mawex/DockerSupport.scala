@@ -1,4 +1,4 @@
-package example
+package gwi.mawex
 
 import scala.sys.process.Process
 import scala.util.Try

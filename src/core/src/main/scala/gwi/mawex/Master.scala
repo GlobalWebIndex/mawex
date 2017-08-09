@@ -48,7 +48,7 @@ class Master(masterId: String, taskTimeout: FiniteDuration, workerCheckinInterva
   }
 
   private[this] def notifyWorkers(): Unit =
-    workState.getPendingTasks.keySet.map(_.id.consumerGroup)
+    workState.getPendingTasksConsumerGroups
       .flatMap(workersById.getIdleWorkerRef)
       .foreach(_ ! m2w.TaskReady)
 

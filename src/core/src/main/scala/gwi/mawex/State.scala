@@ -34,6 +34,14 @@ case class State private(private val pendingTasks: Map[Task, Long], private val 
   def getTaskInProgress(taskId: TaskId): Option[Task] = progressingTasks.keySet.find(_.id == taskId)
   def getDoneTaskIds: Vector[TaskId] = doneTaskIds
 
+  def getPendingTasksConsumerGroups: Seq[String] =
+    pendingTasks.toSeq
+      .map { case (task, ts) => task.id.consumerGroup -> ts }
+      .groupBy(_._1)
+      .mapValues(_.map(_._2).min).toSeq
+      .sortBy(_._2)
+      .map(_._1)
+
   def updated(event: TaskDomainEvent): State = event match {
     case TaskAccepted(task) =>
       copy(pendingTasks = pendingTasks.updated(task, System.currentTimeMillis))

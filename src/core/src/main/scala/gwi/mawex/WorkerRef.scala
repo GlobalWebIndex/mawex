@@ -1,5 +1,6 @@
 package gwi.mawex
 
+import akka.Done
 import akka.actor.{ActorContext, ActorRef}
 import akka.event.LoggingAdapter
 
@@ -78,7 +79,7 @@ protected[mawex] object WorkerRef {
       taskOpt
     }
 
-    def checkIn(workerId: WorkerId, sender: ActorRef, context: ActorContext)(implicit log: LoggingAdapter): Unit = {
+    def checkIn(workerId: WorkerId, sender: ActorRef, context: ActorContext)(implicit log: LoggingAdapter): Option[Done] = {
       val workerStatusOpt = underlying.get(workerId)
       if (workerStatusOpt.exists(_.ref != sender)) { // check for worker's ref change
         val oldWorkerStatus = workerStatusOpt.get
@@ -86,12 +87,15 @@ protected[mawex] object WorkerRef {
         context.unwatch(oldWorkerStatus.ref)
         changeWorkerRef(workerId, sender)
         log.warning("Existing worker {} checked in again with different ActorRef !", workerId)
+        Some(Done.getInstance())
       } else if (workerStatusOpt.isEmpty) {
         log.info("Worker checked in: {}", workerId)
         context.watch(sender)
         checkInNew(workerId, sender)
+        Some(Done.getInstance())
       } else {
         checkInOld(workerId)
+        None
       }
     }
   }

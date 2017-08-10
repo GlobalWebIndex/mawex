@@ -1,8 +1,8 @@
 
-lazy val mawexVersion = "0.0.8"
+lazy val mawexVersion = "0.0.9"
 
 version in ThisBuild := mawexVersion
-crossScalaVersions in ThisBuild := Seq("2.12.1", "2.11.8")
+crossScalaVersions in ThisBuild := Seq("2.12.3", "2.11.8")
 organization in ThisBuild := "net.globalwebindex"
 fork in Test in ThisBuild := true
 

@@ -115,17 +115,17 @@ object Service {
         .withFallback(ConfigFactory.load())
     )
 
-  def workerActorRef(masterId: String, contactPoints: List[Address], workerId: WorkerId, taskTimeout: FiniteDuration, executorClazz: Class[_], executorArgs: Seq[String], system: ActorSystem)(arf: ActorRefFactory = system): ActorRef = {
+  def workerActorRef(masterId: String, clusterClient: ActorRef, workerId: WorkerId, taskTimeout: FiniteDuration, executorClazz: Class[_], executorArgs: Seq[String], system: ActorSystem): ActorRef =
+    system.actorOf(Worker.props(masterId, clusterClient, workerId, Props(executorClazz, executorArgs), taskTimeout), s"worker-${workerId.id}")
+
+  def workerClusterClient(seedNodes: List[Address], system: ActorSystem): ActorRef = {
     val initialContacts =
-      contactPoints
+      seedNodes
         .map { case Address(host, port) => s"akka.tcp://ClusterSystem@$host:$port" }
         .map { case AddressFromURIString(addr) => RootActorPath(addr) / "system" / "receptionist" }
         .toSet
-
-    val clusterClient = arf.actorOf(ClusterClient.props(ClusterClientSettings(system).withInitialContacts(initialContacts)), "clusterClient")
-    arf.actorOf(Worker.props(masterId, clusterClient, workerId, Props(executorClazz, executorArgs), taskTimeout), "worker")
+    system.actorOf(ClusterClient.props(ClusterClientSettings(system).withInitialContacts(initialContacts)), "clusterClient")
   }
-
 }
 
 sealed trait Service extends Cmd { this: Command =>
@@ -166,7 +166,7 @@ object MasterCmd extends Command(name = "master", description = "launches master
 object WorkerCmd extends Command(name = "workers", description = "launches workers") with Service {
   import Service._
 
-  var consumerGroups  = opt[List[String]](default = List("default"), description = "sum,sum,add,add,add,divide - 6 workers in 3 consumer groups")
+  var consumerGroups  = opt[List[String]](default = List("default"), description = "sum,add,divide - 3 workers in 3 consumer groups")
   var pod             = opt[String](default = "default", description = "Workers within the same pod are executing sequentially")
   var masterId        = opt[String](default = "master", name="master-id")
   var taskTimeout     = opt[Int](default = 60*60, description = "timeout for a task in seconds")
@@ -175,8 +175,17 @@ object WorkerCmd extends Command(name = "workers", description = "launches worke
 
   def run(): Unit = {
     val system = buildWorkerSystem(hostAddress)
+    val clusterClient = workerClusterClient(seedNodes, system)
     consumerGroups.foreach { consumerGroup =>
-      workerActorRef(masterId, seedNodes, WorkerId(consumerGroup, pod), taskTimeout.seconds, Class.forName(executorClass), executorArgs.map(_.split(" ").filter(_.nonEmpty).toSeq).getOrElse(Seq.empty), system)()
+      workerActorRef(
+        masterId,
+        clusterClient,
+        WorkerId(consumerGroup, pod),
+        taskTimeout.seconds,
+        Class.forName(executorClass),
+        executorArgs.map(_.split(" ").filter(_.nonEmpty).toSeq).getOrElse(Seq.empty),
+        system
+      )
     }
     sys.addShutdownHook(Await.result(system.terminate(), 10.seconds))
   }

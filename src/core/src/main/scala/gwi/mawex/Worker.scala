@@ -43,7 +43,7 @@ class Worker(masterId: String, clusterClient: ActorRef, workerId: WorkerId, work
     clusterClient ! SendToAll(MasterAddress,w2m.TaskRequest(workerId))
 
   private[this] def master_checkMeInPeriodically =
-    context.system.scheduler.schedule(500.millis, checkinInterval, clusterClient, SendToAll(MasterAddress, w2m.CheckIn(workerId)))
+    context.system.scheduler.schedule(5.millis, checkinInterval, clusterClient, SendToAll(MasterAddress, w2m.CheckIn(workerId)))
 
   private[this] def master_finishTask(result: Try[Any]) = {
     clusterClient ! SendToAll(MasterAddress, w2m.TaskFinished(workerId, taskId, result))

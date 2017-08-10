@@ -131,13 +131,13 @@ object Service {
 sealed trait Service extends Cmd { this: Command =>
   import Service._
   var seedNodes = opt[List[Address]](default = List(Address("master", 2552)), description = "12.34.56.78:2551,12.34.56.79:2552")
-  var hostAddress = arg[Address](required = true, name="host-address", description = "host:port of this node")
+  var hostAddress = arg[Address](name="host-address", description = "host:port of this node")
 }
 
 object SandBoxCmd extends Command(name = "sandbox", description = "executes arbitrary class") with Cmd {
 
   var timeout = opt[Int](default = 1800, description = "How many seconds the app can run before it times out")
-  var mainClass = arg[String](required = true)
+  var mainClass = arg[String]()
   var mainClassArgs = arg[Option[String]](required = false)
 
   def run() = {
@@ -151,8 +151,8 @@ object MasterCmd extends Command(name = "master", description = "launches master
   import Service._
 
   var taskTimeout  = opt[Int](default = 60*60, description = "timeout for a task in seconds")
-  var redisAddress = arg[Address](required = true, name="redis-address", description = "host:port of redis")
   var masterId     = opt[String](default = "master", name="master-id")
+  var redisAddress = arg[Address](name="redis-address", description = "host:port of redis")
 
   def run(): Unit = {
     val redisPassword = sys.env.getOrElse("REDIS_PASSWORD", throw new IllegalArgumentException("REDIS_PASSWORD env var must defined !!!"))
@@ -168,10 +168,10 @@ object WorkerCmd extends Command(name = "workers", description = "launches worke
 
   var consumerGroups  = opt[List[String]](default = List("default"), description = "sum,sum,add,add,add,divide - 6 workers in 3 consumer groups")
   var pod             = opt[String](default = "default", description = "Workers within the same pod are executing sequentially")
-  var executorClass   = arg[String](required = true, name="executor-class", description = "Full class name of executor Actor, otherwise identity ping/pong executor will be used")
-  var executorArgs    = arg[Option[String]](required = false, name="executor-args", description = "Arguments to be passed to forked executor jvm process")
   var masterId        = opt[String](default = "master", name="master-id")
   var taskTimeout     = opt[Int](default = 60*60, description = "timeout for a task in seconds")
+  var executorClass   = arg[String](name="executor-class", description = "Full class name of executor Actor, otherwise identity ping/pong executor will be used")
+  var executorArgs    = arg[Option[String]](required = false, name="executor-args", description = "Arguments to be passed to forked executor jvm process")
 
   def run(): Unit = {
     val system = buildWorkerSystem(hostAddress)

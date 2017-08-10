@@ -11,13 +11,15 @@ import akka.cluster.pubsub.DistributedPubSubMediator.{CurrentTopics, GetTopics, 
 import akka.testkit.{ImplicitSender, TestKit, TestProbe}
 import com.typesafe.config.ConfigFactory
 import gwi.mawex.Service.Address
+import org.scalatest.concurrent.Eventually
+import org.scalatest.time.{Millis, Second, Span}
 import org.scalatest.{BeforeAndAfterAll, FreeSpecLike, Matchers}
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.util.{Failure, Success, Try}
 
-class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSupport with Matchers with FreeSpecLike with BeforeAndAfterAll with ImplicitSender {
+class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSupport with Matchers with FreeSpecLike with BeforeAndAfterAll with ImplicitSender with Eventually {
   import MawexSpec._
 
   def this() = this(Service.buildClusterSystem(Address("localhost", 6379), "foo", Address("localhost", 0), List.empty, 1))
@@ -79,14 +81,13 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
     val workerRefs =
       workerSpots.map { case WorkerDef(workerId, props) =>
         val workerRef = workerSystem.actorOf(Worker.props(MasterId, clusterWorkerClient, workerId, props, 1.second, 1.second), s"worker-${workerId.id}")
-        Thread.sleep(50)
         workerId -> workerRef
       }
     try
       fn(workerRefs)
     finally {
       workerRefs.map(_._2).foreach(workerSystem.stop)
-      Thread.sleep(100)
+      Thread.sleep(50)
     }
   }
 
@@ -142,14 +143,14 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
     }
 
     "allow for scaling out" in {
-      forWorkersDo(WorkerDef(WorkerId(ConsumerGroup, "1", "1"), TestExecutor.evalProps(Some(TestExecutor.sleepEvaluation(50))))) {  _ =>
+      forWorkersDo(WorkerDef(WorkerId(ConsumerGroup, "1", "1"), TestExecutor.identifyProps)) {  _ =>
         val nextTaskId = taskCounter.getAndIncrement()
         val taskId = TaskId(nextTaskId.toString, ConsumerGroup)
         masterProxy ! Task(taskId, 1)
         expectMsg(p2c.Accepted(taskId))
         probe.expectMsgType[TaskResult].task.id should be(TaskId(nextTaskId.toString, ConsumerGroup))
         assertStatus(Set.empty, Set.empty, _ == (1 until taskCounter.get).map(_.toString).toVector, Map("1" -> Idle))
-        forWorkersDo(WorkerDef(WorkerId(ConsumerGroup, "2", "2"), TestExecutor.evalProps(Some(TestExecutor.sleepEvaluation(50))))) {  _ =>
+        forWorkersDo(WorkerDef(WorkerId(ConsumerGroup, "2", "2"), TestExecutor.identifyProps)) {  _ =>
           submitTasksAndValidate(2, _ => ConsumerGroup)
           assertStatus(Set.empty, Set.empty, _ == (1 until taskCounter.get).map(_.toString).toVector, Map("1" -> Idle, "2" -> Idle))
         }
@@ -157,7 +158,7 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
     }
 
     "allow for scaling down" in {
-      forWorkersDo((1 to 4).map(n => WorkerDef(WorkerId(ConsumerGroup, n.toString, n.toString), TestExecutor.evalProps(Some(TestExecutor.sleepEvaluation(50))))): _*) { workerRefs =>
+      forWorkersDo((1 to 4).map(n => WorkerDef(WorkerId(ConsumerGroup, n.toString, n.toString), TestExecutor.identifyProps)): _*) { workerRefs =>
         workerRefs.take(3).foreach { case (workerId, workerRef) =>
           masterProxy ! w2m.CheckOut(workerId)
           workerSystem.stop(workerRef)
@@ -165,6 +166,24 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
         submitTasksAndValidate(1, _ => ConsumerGroup)
         assertStatus(Set.empty, Set.empty, _ == (1 until taskCounter.get).map(_.toString).toVector, Map("4" -> Idle))
 
+      }
+    }
+
+    "allow worker to restart and show up with a different actor ref" in {
+      val workerDef = WorkerDef(WorkerId(ConsumerGroup, "1", "1"), TestExecutor.identifyProps)
+      forWorkersDo(workerDef) { workerRefs =>
+        eventually (timeout(Span(1, Second)), interval(Span(100, Millis))) {
+          assertStatus(Set.empty, Set.empty, _ => true, Map("1" -> Idle))
+        }
+        workerSystem.stop(workerRefs.head._2)
+        eventually (timeout(Span(1, Second)), interval(Span(100, Millis))) {
+          assertStatus(Set.empty, Set.empty, _ => true, Map.empty)
+        }
+        forWorkersDo(workerDef) { _ =>
+          eventually (timeout(Span(1, Second)), interval(Span(100, Millis))) {
+            assertStatus(Set.empty, Set.empty, _ => true, Map("1" -> Idle))
+          }
+        }
       }
     }
 
@@ -178,7 +197,6 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
 
     "load balance work to many workers sharing a consumer group" in {
       forWorkersDo((1 to 2).map(n => WorkerDef(WorkerId(ConsumerGroup, n.toString, n.toString), TestExecutor.evalProps(Some(TestExecutor.sleepEvaluation(300))))): _*) {  _ =>
-        Thread.sleep(300)
         val nextTaskId_1 = taskCounter.getAndIncrement().toString
         val nextTaskId_2 = taskCounter.getAndIncrement().toString
         val taskId_1 = TaskId(nextTaskId_1, ConsumerGroup)
@@ -187,8 +205,9 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
         expectMsg(p2c.Accepted(taskId_1))
         masterProxy ! Task(taskId_2, 1)
         expectMsg(p2c.Accepted(taskId_2))
-        Thread.sleep(200)
-        assertStatus(Set.empty, Set(nextTaskId_1, nextTaskId_2), _ => true, Map("1" -> Busy(taskId_1), "2" -> Busy(taskId_2)))
+        eventually (timeout(Span(1, Second)), interval(Span(50, Millis))) {
+          assertStatus(Set.empty, Set(nextTaskId_1, nextTaskId_2), _ => true, Map("1" -> Busy(taskId_1), "2" -> Busy(taskId_2)))
+        }
       }
     }
 

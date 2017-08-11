@@ -28,14 +28,14 @@ protected[mawex] object WorkerRef {
     private[this] def checkInOld(workerId: WorkerId): mutable.Map[WorkerId, WorkerRef] =
       adjust(workerId)(_.get.copy(registrationTime = System.currentTimeMillis()))
 
-    def getBusyWorkers(pod: String): Set[WorkerId] = underlying.collect { case (id@WorkerId(_, wPod, _), WorkerRef(_, Busy(_), _, 0)) if wPod == pod => id }.toSet
+    def getBusyWorkers(pod: String): Set[WorkerId] = underlying.collect { case (id@WorkerId(_, wPod, _), WorkerRef(_, Busy(_), _, _)) if wPod == pod => id }.toSet
 
     def employ(workerId: WorkerId, taskId: TaskId): mutable.Map[WorkerId, WorkerRef] =
       adjust(workerId)(_.get.copy(status = Busy(taskId)))
 
     def idle(workerId: WorkerId, taskId: TaskId)(implicit log: LoggingAdapter): Unit =
       underlying.get(workerId) match {
-        case Some(s @ WorkerRef(_, Busy(busyTaskId), _, 0)) if taskId == busyTaskId =>
+        case Some(s @ WorkerRef(_, Busy(busyTaskId), _, _)) if taskId == busyTaskId =>
           underlying += (workerId -> s.copy(status = Idle))
         case _ =>
           log.warning("Worker {} state probably not persisted after recovery, workId {} missing ...", workerId, taskId)

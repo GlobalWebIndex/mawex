@@ -203,12 +203,11 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
         val taskId_1 = TaskId(nextTaskId_1, ConsumerGroup)
         val taskId_2 = TaskId(nextTaskId_2, ConsumerGroup)
         masterProxy ! Task(taskId_1, 1)
-        expectMsg(p2c.Accepted(taskId_1))
         masterProxy ! Task(taskId_2, 1)
+        expectMsg(p2c.Accepted(taskId_1))
         expectMsg(p2c.Accepted(taskId_2))
-        eventually (timeout(Span(1, Second)), interval(Span(20, Millis))) {
-          assertStatus(Set.empty, Set(nextTaskId_1, nextTaskId_2), _ => (), Map("1" -> Busy(taskId_1), "2" -> Busy(taskId_2)))
-        }
+        Thread.sleep(100)
+        assertStatus(Set.empty, Set(nextTaskId_1, nextTaskId_2), _ => (), Map("1" -> Busy(taskId_1), "2" -> Busy(taskId_2)))
       }
     }
 

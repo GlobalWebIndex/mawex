@@ -93,13 +93,13 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
 
   private[this] def receiveResults(n: Int) = probe.receiveN(n, 5.seconds).map { case r: TaskResult => r }.partition(_.result.isSuccess)
 
-  private[this] def assertStatus(pending: Set[String], progressing: Set[String], done: Vector[String] => Boolean, workerStatusById: Map[String, WorkerStatus]) = {
+  private[this] def assertStatus(pending: Set[String], progressing: Set[String], done: Vector[String] => Unit, workerStatusById: Map[String, WorkerStatus]) = {
     masterProxy ! GetMawexState
     val MawexState(State(actualPending, actualProgressing, actualDone), workersById) = expectMsgType[MawexState]
     assertResult(pending)(actualPending.keySet.map(_.id.id))
     assertResult(progressing)(actualProgressing.keySet.map(_.id.id))
     assertResult(workerStatusById)(workersById.map { case (workerId, workerRef) => workerId.id -> workerRef.status })
-    assert(done(actualDone.map(_.id)))
+    done(actualDone.map(_.id))
   }
 
   private[this] def submitTasksAndValidate(refSize: Int, genTaskGroup: Int => String): Unit = {
@@ -123,7 +123,7 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
         masterProxy ! Task(taskId, 1)
         expectMsg(p2c.Accepted(taskId))
         probe.expectMsgType[TaskResult].task.id should be(TaskId(nextTaskId.toString, ConsumerGroup))
-        assertStatus(Set.empty, Set.empty, _ == Vector(nextTaskId.toString), Map("1" -> Idle))
+        assertStatus(Set.empty, Set.empty, done => assertResult(Vector(nextTaskId.toString))(done), Map("1" -> Idle))
       }
     }
 
@@ -138,7 +138,7 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
         val (successes, failures) = receiveResults(20)
         assert(failures.size == 2)
         assert(successes.size == 18)
-        assertStatus(Set.empty, Set.empty, _ == (1 until taskCounter.get).map(_.toString).toVector, (1 to 3).map(n => n.toString -> Idle).toMap)
+        assertStatus(Set.empty, Set.empty, done => assertResult((1 until taskCounter.get).map(_.toString).toVector)(done), (1 to 3).map(n => n.toString -> Idle).toMap)
       }
     }
 
@@ -152,7 +152,7 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
         assertStatus(Set.empty, Set.empty, _ == (1 until taskCounter.get).map(_.toString).toVector, Map("1" -> Idle))
         forWorkersDo(WorkerDef(WorkerId(ConsumerGroup, "2", "2"), TestExecutor.identifyProps)) {  _ =>
           submitTasksAndValidate(2, _ => ConsumerGroup)
-          assertStatus(Set.empty, Set.empty, _ == (1 until taskCounter.get).map(_.toString).toVector, Map("1" -> Idle, "2" -> Idle))
+          assertStatus(Set.empty, Set.empty, done => assertResult((1 until taskCounter.get).map(_.toString).toVector)(done), Map("1" -> Idle, "2" -> Idle))
         }
       }
     }
@@ -164,7 +164,7 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
           workerSystem.stop(workerRef)
         }
         submitTasksAndValidate(1, _ => ConsumerGroup)
-        assertStatus(Set.empty, Set.empty, _ == (1 until taskCounter.get).map(_.toString).toVector, Map("4" -> Idle))
+        assertStatus(Set.empty, Set.empty, done => assertResult(done)((1 until taskCounter.get).map(_.toString).toVector), Map("4" -> Idle))
 
       }
     }
@@ -173,15 +173,15 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
       val workerDef = WorkerDef(WorkerId(ConsumerGroup, "1", "1"), TestExecutor.identifyProps)
       forWorkersDo(workerDef) { workerRefs =>
         eventually (timeout(Span(1, Second)), interval(Span(100, Millis))) {
-          assertStatus(Set.empty, Set.empty, _ => true, Map("1" -> Idle))
+          assertStatus(Set.empty, Set.empty, _ => (), Map("1" -> Idle))
         }
         workerSystem.stop(workerRefs.head._2)
         eventually (timeout(Span(1, Second)), interval(Span(100, Millis))) {
-          assertStatus(Set.empty, Set.empty, _ => true, Map.empty)
+          assertStatus(Set.empty, Set.empty, _ => (), Map.empty)
         }
         forWorkersDo(workerDef) { _ =>
           eventually (timeout(Span(1, Second)), interval(Span(100, Millis))) {
-            assertStatus(Set.empty, Set.empty, _ => true, Map("1" -> Idle))
+            assertStatus(Set.empty, Set.empty, _ => (), Map("1" -> Idle))
           }
         }
       }
@@ -191,12 +191,13 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
       val running = new AtomicBoolean(false)
       forWorkersDo((1 to 3).map(n => WorkerDef(WorkerId(n.toString, Pod, n.toString), TestExecutor.evalProps(Some(TestExecutor.runningEvaluation(running, 30))))): _*) {  _ =>
         submitTasksAndValidate(3, n => ((n%3) + 1).toString)
-        assertStatus(Set.empty, Set.empty, _.toSet == (1 until taskCounter.get).map(_.toString).toSet, Map("1" -> Idle, "2" -> Idle, "3" -> Idle))
+        assertStatus(Set.empty, Set.empty, done => assertResult((1 until taskCounter.get).map(_.toString).toSet)(done.toSet), Map("1" -> Idle, "2" -> Idle, "3" -> Idle))
       }
     }
 
     "load balance work to many workers sharing a consumer group" in {
       forWorkersDo((1 to 2).map(n => WorkerDef(WorkerId(ConsumerGroup, n.toString, n.toString), TestExecutor.evalProps(Some(TestExecutor.sleepEvaluation(300))))): _*) {  _ =>
+        Thread.sleep(300)
         val nextTaskId_1 = taskCounter.getAndIncrement().toString
         val nextTaskId_2 = taskCounter.getAndIncrement().toString
         val taskId_1 = TaskId(nextTaskId_1, ConsumerGroup)
@@ -205,8 +206,8 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
         expectMsg(p2c.Accepted(taskId_1))
         masterProxy ! Task(taskId_2, 1)
         expectMsg(p2c.Accepted(taskId_2))
-        eventually (timeout(Span(1, Second)), interval(Span(50, Millis))) {
-          assertStatus(Set.empty, Set(nextTaskId_1, nextTaskId_2), _ => true, Map("1" -> Busy(taskId_1), "2" -> Busy(taskId_2)))
+        eventually (timeout(Span(1, Second)), interval(Span(20, Millis))) {
+          assertStatus(Set.empty, Set(nextTaskId_1, nextTaskId_2), _ => (), Map("1" -> Busy(taskId_1), "2" -> Busy(taskId_2)))
         }
       }
     }

@@ -4,13 +4,13 @@ import akka.Done
 import akka.actor.{ActorContext, ActorRef}
 import akka.event.LoggingAdapter
 
-import scala.collection.mutable
+import collection.{breakOut, mutable}
 import scala.concurrent.duration.FiniteDuration
 
 protected[mawex] sealed trait WorkerStatus
 protected[mawex] case object Idle extends WorkerStatus
 protected[mawex] case class Busy(taskId: TaskId) extends WorkerStatus
-protected[mawex] case class WorkerRef(ref: ActorRef, status: WorkerStatus, registrationTime: Long)
+protected[mawex] case class WorkerRef(ref: ActorRef, status: WorkerStatus, registrationTime: Long, lastTaskOfferNanoTime: Long)
 
 protected[mawex] object WorkerRef {
 
@@ -23,19 +23,19 @@ protected[mawex] object WorkerRef {
       adjust(workerId)(_.get.copy(ref = newRef, registrationTime = System.currentTimeMillis()))
 
     private[this] def checkInNew(workerId: WorkerId, ref: ActorRef): mutable.Map[WorkerId, WorkerRef] =
-      underlying += (workerId -> WorkerRef(ref, status = Idle, System.currentTimeMillis()))
+      underlying += (workerId -> WorkerRef(ref, status = Idle, System.currentTimeMillis(), 0))
 
     private[this] def checkInOld(workerId: WorkerId): mutable.Map[WorkerId, WorkerRef] =
       adjust(workerId)(_.get.copy(registrationTime = System.currentTimeMillis()))
 
-    def getBusyWorkers(pod: String): Set[WorkerId] = underlying.collect { case (id@WorkerId(_, wPod, _), WorkerRef(_, Busy(_), _)) if wPod == pod => id }.toSet
+    def getBusyWorkers(pod: String): Set[WorkerId] = underlying.collect { case (id@WorkerId(_, wPod, _), WorkerRef(_, Busy(_), _, 0)) if wPod == pod => id }.toSet
 
     def employ(workerId: WorkerId, taskId: TaskId): mutable.Map[WorkerId, WorkerRef] =
       adjust(workerId)(_.get.copy(status = Busy(taskId)))
 
     def idle(workerId: WorkerId, taskId: TaskId)(implicit log: LoggingAdapter): Unit =
       underlying.get(workerId) match {
-        case Some(s @ WorkerRef(_, Busy(busyTaskId), _)) if taskId == busyTaskId =>
+        case Some(s @ WorkerRef(_, Busy(busyTaskId), _, 0)) if taskId == busyTaskId =>
           underlying += (workerId -> s.copy(status = Idle))
         case _ =>
           log.warning("Worker {} state probably not persisted after recovery, workId {} missing ...", workerId, taskId)
@@ -50,7 +50,7 @@ protected[mawex] object WorkerRef {
         .filter ( task => !underlying.exists(_._2.status == Busy(task.id)) )
 
     def validate(workState: State, workerCheckinInterval: FiniteDuration, taskTimeout: FiniteDuration)(implicit log: LoggingAdapter): Unit = {
-      for ((workerId, WorkerRef(_, _, registrationTime)) <- underlying if (System.currentTimeMillis() - registrationTime) > workerCheckinInterval.toMillis * 6) {
+      for ((workerId, WorkerRef(_, _, registrationTime, _)) <- underlying if (System.currentTimeMillis() - registrationTime) > workerCheckinInterval.toMillis * 6) {
         log.warning(s"worker $workerId has not checked in, context.watch doesn't work !!!")
       }
       for ((taskId, creationTime) <- workState.getProgressingTaskIds if (System.currentTimeMillis() - creationTime) > taskTimeout.toMillis) {
@@ -61,15 +61,24 @@ protected[mawex] object WorkerRef {
       }
     }
 
-    def getIdleWorkerRef(consumerGroup: String): Option[ActorRef] =
-      underlying.collectFirst { case (WorkerId(wGroup, wPod, _), WorkerRef(ref, Idle, _)) if wGroup == consumerGroup && getBusyWorkers(wPod).isEmpty => ref }
+    private[this] def getIdleWorkerRefs(consumerGroup: String): Seq[(WorkerId, WorkerRef)] =
+      underlying.toSeq
+        .collect { case t@(WorkerId(wGroup, wPod, _), WorkerRef(_, Idle, _, _)) if wGroup == consumerGroup && getBusyWorkers(wPod).isEmpty => t }(breakOut)
+        .sortBy(_._2.lastTaskOfferNanoTime)
+
+    def offerTask(consumerGroup: String): Unit =
+      getIdleWorkerRefs(consumerGroup).foreach { case (workerId, workerRef) =>
+        val offerTime = System.nanoTime()
+        workerRef.ref ! m2w.TaskReady
+        underlying += (workerId -> workerRef.copy(lastTaskOfferNanoTime = offerTime))
+      }
 
     def checkOut(workerId: WorkerId, context: ActorContext)(implicit log: LoggingAdapter): Option[TaskId] = {
       val workerStatusOpt = underlying.get(workerId)
       val taskOpt =
         workerStatusOpt
           .collect {
-            case WorkerRef(_, Busy(taskId), _) =>
+            case WorkerRef(_, Busy(taskId), _, _) =>
               log.warning(s"Worker $workerId terminated while executing task $taskId, it will be considered failed ...")
               taskId
           }

@@ -47,8 +47,7 @@ class Master(masterId: String, taskTimeout: FiniteDuration, workerCheckinInterva
 
   private[this] def notifyWorkers(): Unit =
     workState.getPendingTasksConsumerGroups
-      .flatMap(workersById.getIdleWorkerRef)
-      .foreach(_ ! m2w.TaskReady)
+      .foreach(workersById.offerTask)
 
   private[this] def handleHeartBeat(heartBeat: HeartBeat) = heartBeat match {
     case Validate =>

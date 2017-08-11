@@ -1,5 +1,5 @@
 
-lazy val mawexVersion = "0.0.9"
+lazy val mawexVersion = "0.1.0"
 
 version in ThisBuild := mawexVersion
 crossScalaVersions in ThisBuild := Seq("2.12.3", "2.11.8")

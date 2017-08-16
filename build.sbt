@@ -24,10 +24,7 @@ lazy val `mawex-core` = (project in file("src/core"))
   .settings(publishSettings("GlobalWebIndex", "mawex-core", s3Resolver))
   .settings(assemblySettings("mawex", Some("gwi.mawex.Launcher")))
   .settings(deploySettings("java:8", "gwiq", "mawex", "gwi.mawex.Launcher"))
-  .dependsOn(
-    `mawex-api` % "compile->compile;test->test",
-    ProjectRef(uri(s"$githubOrgUrl/saturator.git#v$saturatorVersion"), "saturator-api")
-  )
+  .dependsOn(`mawex-api` % "compile->compile;test->test")
 
 lazy val `mawex-example-worker` = (project in file("src/example"))
   .enablePlugins(CommonPlugin, DockerPlugin)

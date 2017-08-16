@@ -191,9 +191,3 @@ object WorkerCmd extends Command(name = "workers", description = "launches worke
   }
 
 }
-
-class IdentityExecutor(executorArgs: Seq[String]) extends Actor {
-  def receive = {
-    case task => sender() ! e2w.TaskExecuted(Success(task))
-  }
-}

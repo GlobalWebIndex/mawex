@@ -10,7 +10,7 @@ import scala.concurrent.duration.FiniteDuration
 protected[mawex] sealed trait WorkerStatus
 protected[mawex] case object Idle extends WorkerStatus
 protected[mawex] case class Busy(taskId: TaskId) extends WorkerStatus
-protected[mawex] case class WorkerRef(ref: ActorRef, status: WorkerStatus, registrationTime: Long, lastTaskOfferNanoTime: Long)
+protected[mawex] case class WorkerRef(ref: ActorRef, status: WorkerStatus, registrationTime: Long, lastTaskOfferNanoTime: Option[Long])
 
 protected[mawex] object WorkerRef {
 
@@ -23,7 +23,7 @@ protected[mawex] object WorkerRef {
       adjust(workerId)(_.get.copy(ref = newRef, registrationTime = System.currentTimeMillis()))
 
     private[this] def checkInNew(workerId: WorkerId, ref: ActorRef): mutable.Map[WorkerId, WorkerRef] =
-      underlying += (workerId -> WorkerRef(ref, status = Idle, System.currentTimeMillis(), 0))
+      underlying += (workerId -> WorkerRef(ref, status = Idle, System.currentTimeMillis(), None))
 
     private[this] def checkInOld(workerId: WorkerId): mutable.Map[WorkerId, WorkerRef] =
       adjust(workerId)(_.get.copy(registrationTime = System.currentTimeMillis()))
@@ -64,13 +64,13 @@ protected[mawex] object WorkerRef {
     private[this] def getIdleWorkerRefs(consumerGroup: String): Seq[(WorkerId, WorkerRef)] =
       underlying.toSeq
         .collect { case t@(WorkerId(wGroup, wPod, _), WorkerRef(_, Idle, _, _)) if wGroup == consumerGroup && getBusyWorkers(wPod).isEmpty => t }(breakOut)
-        .sortBy(_._2.lastTaskOfferNanoTime)
+        .sortBy( worker => worker._2.lastTaskOfferNanoTime.getOrElse(worker._2.registrationTime) )
 
     def offerTask(consumerGroup: String): Unit =
       getIdleWorkerRefs(consumerGroup).foreach { case (workerId, workerRef) =>
         val offerTime = System.nanoTime()
         workerRef.ref ! m2w.TaskReady
-        underlying += (workerId -> workerRef.copy(lastTaskOfferNanoTime = offerTime))
+        underlying += (workerId -> workerRef.copy(lastTaskOfferNanoTime = Some(offerTime)))
       }
 
     def checkOut(workerId: WorkerId, context: ActorContext)(implicit log: LoggingAdapter): Option[TaskId] = {

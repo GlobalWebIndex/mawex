@@ -81,6 +81,7 @@ class MawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSuppor
     val workerRefs =
       workerSpots.map { case WorkerDef(workerId, props) =>
         val workerRef = workerSystem.actorOf(Worker.props(MasterId, clusterWorkerClient, workerId, props, 1.second, 1.second), s"worker-${workerId.id}")
+        Thread.sleep(10)
         workerId -> workerRef
       }
     try

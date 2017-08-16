@@ -10,7 +10,6 @@ import org.backuity.clist.util.Read
 import scala.collection.JavaConverters._
 import scala.concurrent.Await
 import scala.concurrent.duration._
-import scala.util.Success
 
 object Launcher {
   def main(args: Array[String]): Unit =

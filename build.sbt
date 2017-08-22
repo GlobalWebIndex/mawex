@@ -1,6 +1,5 @@
 
-lazy val mawexVersion     = "0.1.1"
-lazy val saturatorVersion = "0.0.7"
+lazy val mawexVersion     = "0.1.2"
 
 lazy val githubOrgUrl     = "https://github.com/GlobalWebIndex"
 

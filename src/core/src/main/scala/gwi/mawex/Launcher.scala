@@ -103,10 +103,13 @@ object Service {
             kryo.idstrategy = automatic
             extensions = ["com.romix.akka.serialization.kryo.KryoSerializationExtension$$"]
           }
-          remote.netty.tcp {
-             hostname = ${hostAddress.host}
-             port = ${hostAddress.port}
-             bind-hostname = 0.0.0.0
+          remote {
+            enabled-transports = ["akka.remote.netty.tcp"]
+            netty.tcp {
+              hostname = ${hostAddress.host}
+              port = ${hostAddress.port}
+              bind-hostname = 0.0.0.0
+            }
           }
         }
         """.stripMargin

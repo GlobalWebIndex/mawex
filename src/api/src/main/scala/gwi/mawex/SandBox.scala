@@ -14,11 +14,13 @@ object SandBox {
     sys.env.get("FORK_JAVA_TOOL_OPTIONS").foreach { javaToolOpts =>
       builder.environment().put("JAVA_TOOL_OPTIONS", javaToolOpts)
     }
-    Try(Await.result(Future(Process(builder).run(false).exitValue())(ExecutionContext.global), timeout)) match {
+    val process = Process(builder).run(false)
+    Try(Await.result(Future(process.exitValue())(ExecutionContext.global), timeout)) match {
       case Success(status) =>
         println(s"Forked JVM finished on time with status $status")
         status
       case Failure(ex) =>
+        Try(process.destroy())
         println(s"Forked JVM didn't finish on time because ${ex.getMessage}")
         ex.printStackTrace()
         1

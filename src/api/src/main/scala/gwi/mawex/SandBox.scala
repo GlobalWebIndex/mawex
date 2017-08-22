@@ -17,7 +17,6 @@ object SandBox {
     Try(Await.result(Future(Process(builder).run(false).exitValue())(ExecutionContext.global), timeout)) match {
       case Success(status) =>
         println(s"Forked JVM finished on time with status $status")
-        Thread.sleep(3000)
         status
       case Failure(ex) =>
         println(s"Forked JVM didn't finish on time because ${ex.getMessage}")

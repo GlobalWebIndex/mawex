@@ -68,7 +68,7 @@ System is designed for :
     - add more workers on the fly if tasks start coming more frequently
     - switch to bigger pods if workers need more resources, memory especially
  2. resiliency :
-    - tasks are executed by Executor in forked JVM process which minimizes possibility of system failures in long terms
+    - tasks are executed by Executor in forked JVM process, so called sandbox, which minimizes possibility of system failures
 
 Tasks that are going to Consumer Groups A,B or C,D,E,F are similarly resource demanding so they can live on
 the same machines. Master executes tasks sequentially within a Pod, never concurrently, so that you can

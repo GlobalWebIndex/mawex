@@ -4,39 +4,62 @@ import akka.actor._
 import akka.cluster.client.{ClusterClient, ClusterClientSettings}
 import akka.cluster.singleton.{ClusterSingletonManager, ClusterSingletonManagerSettings}
 import com.typesafe.config.{ConfigFactory, ConfigValueFactory}
+import gwi.mawex.ForkingSandBox.ForkedJvm
+import gwi.mawex.RemoteService._
 import org.backuity.clist._
 import org.backuity.clist.util.Read
 
 import scala.collection.JavaConverters._
-import scala.concurrent.Await
 import scala.concurrent.duration._
+import scala.concurrent.{Await, ExecutionContext}
 
 object Launcher {
   def main(args: Array[String]): Unit =
     Cli.parse(args).withProgramName("mawex").withCommands(MasterCmd, WorkerCmd, SandBoxCmd).foreach(_.run())
 }
 
-sealed trait Cmd { this: Command =>
+sealed trait MawexService { this: Command =>
   def run(): Unit
 }
 
-object Service {
-  case class Address(host: String, port: Int)
-
-  implicit val listRead = Read.reads("list") { str =>
-    str.split(",").filter(_.nonEmpty).toList
-  }
-
+sealed trait RemoteService extends MawexService { this: Command =>
+  import RemoteService._
   implicit val addressRead = Read.reads("address") { str =>
     val Array(host,port) = str.split(":")
-    Address(host,port.toInt)
+    HostAddress(host,port.toInt)
   }
 
-  implicit val addressesRead = Read.reads("addresses") { str =>
-    str.split(",").map (_.split(":")).map( arr => Address(arr(0), arr(1).toInt) ).toList
-  }
+  var hostAddress = arg[HostAddress](name="host-address", description = "host:port of this node")
+}
 
-  def buildClusterSystem(redisAddress: Address, redisPassword: String, hostAddress: Address, seedNodes: List[Address], memberSize: Int) =
+object RemoteService {
+  case class HostAddress(host: String, port: Int)
+
+  def buildRemoteSystem(address: Address) =
+    ActorSystem(
+      address.system,
+      ConfigFactory.parseString(
+        s"""
+        akka {
+          actor.provider = "remote"
+          remote {
+            enabled-transports = ["akka.remote.netty.tcp"]
+            netty.tcp {
+              hostname = ${address.host.getOrElse("localhost")}
+              port = ${address.port.getOrElse(0)}
+              bind-hostname = "0.0.0.0"
+            }
+          }
+        }
+        """.stripMargin
+      ).withFallback(ConfigFactory.load("serialization"))
+        .withFallback(ConfigFactory.load())
+    )
+}
+
+object ClusterService {
+
+  def buildClusterSystem(redisAddress: HostAddress, redisPassword: String, hostAddress: HostAddress, seedNodes: List[HostAddress], memberSize: Int) =
     ActorSystem(
       "ClusterSystem",
       ConfigFactory.parseString(
@@ -48,10 +71,7 @@ object Service {
             sentinel = false
           }
           akka {
-            actor {
-              provider = cluster
-              kryo.idstrategy = automatic
-            }
+            actor.provider = "cluster"
             cluster {
               downing-provider-class = "tanukki.akka.cluster.autodown.OldestAutoDowning"
               roles = [backend]
@@ -63,7 +83,7 @@ object Service {
             remote.netty.tcp {
                hostname = ${hostAddress.host}
                port = ${hostAddress.port}
-               bind-hostname = 0.0.0.0
+               bind-hostname = "0.0.0.0"
             }
           }
           custom-downing {
@@ -76,12 +96,12 @@ object Service {
           }
           """.stripMargin
       ).resolve()
-        .withValue("akka.cluster.seed-nodes", ConfigValueFactory.fromIterable(seedNodes.map { case Address(host, port) => s"akka.tcp://ClusterSystem@$host:$port" }.asJava))
+        .withValue("akka.cluster.seed-nodes", ConfigValueFactory.fromIterable(seedNodes.map { case HostAddress(host, port) => s"akka.tcp://ClusterSystem@$host:$port" }.asJava))
         .withFallback(ConfigFactory.load("serialization"))
         .withFallback(ConfigFactory.load())
     )
 
-  def backendSingletonActorRef(taskTimeout: FiniteDuration, system: ActorSystem, name: String)(arf: ActorRefFactory = system): ActorRef = {
+  def clusterSingletonActorRef(taskTimeout: FiniteDuration, system: ActorSystem, name: String)(arf: ActorRefFactory = system): ActorRef = {
     arf.actorOf(
       ClusterSingletonManager.props(
         Master.props(name, taskTimeout),
@@ -92,103 +112,87 @@ object Service {
     )
   }
 
-  def buildWorkerSystem(hostAddress: Address) =
-    ActorSystem(
-      "WorkerSystem",
-      ConfigFactory.parseString(
-        s"""
-        akka {
-          actor {
-            provider = remote
-            kryo.idstrategy = automatic
-            extensions = ["com.romix.akka.serialization.kryo.KryoSerializationExtension$$"]
-          }
-          remote {
-            enabled-transports = ["akka.remote.netty.tcp"]
-            netty.tcp {
-              hostname = ${hostAddress.host}
-              port = ${hostAddress.port}
-              bind-hostname = 0.0.0.0
-            }
-          }
-        }
-        """.stripMargin
-      ).withFallback(ConfigFactory.load("serialization"))
-        .withFallback(ConfigFactory.load())
-    )
+}
 
-  def workerActorRef(masterId: String, clusterClient: ActorRef, workerId: WorkerId, taskTimeout: FiniteDuration, executorClazz: Class[_], executorArgs: Seq[String], system: ActorSystem): ActorRef =
-    system.actorOf(Worker.props(masterId, clusterClient, workerId, Props(executorClazz, executorArgs), taskTimeout), s"worker-${workerId.id}")
+trait ClusterService extends RemoteService { this: Command =>
 
-  def workerClusterClient(seedNodes: List[Address], system: ActorSystem): ActorRef = {
-    val initialContacts =
-      seedNodes
-        .map { case Address(host, port) => s"akka.tcp://ClusterSystem@$host:$port" }
-        .map { case AddressFromURIString(addr) => RootActorPath(addr) / "system" / "receptionist" }
-        .toSet
-    system.actorOf(ClusterClient.props(ClusterClientSettings(system).withInitialContacts(initialContacts)), "clusterClient")
+  implicit val listRead = Read.reads("list") { str =>
+    str.split(",").filter(_.nonEmpty).toList
   }
+
+  implicit val addressesRead = Read.reads("addresses") { str =>
+    str.split(",").map (_.split(":")).map( arr => HostAddress(arr(0), arr(1).toInt) ).toList
+  }
+
+  var seedNodes = opt[List[HostAddress]](default = List(HostAddress("master", 2552)), description = "12.34.56.78:2551,12.34.56.79:2552")
 }
 
-sealed trait Service extends Cmd { this: Command =>
-  import Service._
-  var seedNodes = opt[List[Address]](default = List(Address("master", 2552)), description = "12.34.56.78:2551,12.34.56.79:2552")
-  var hostAddress = arg[Address](name="host-address", description = "host:port of this node")
-}
+object SandBoxCmd extends Command(name = "sandbox", description = "executes arbitrary class") with MawexService {
 
-object SandBoxCmd extends Command(name = "sandbox", description = "executes arbitrary class") with Cmd {
-
-  var timeout = opt[Int](default = 1800, description = "How many seconds the app can run before it times out")
-  var mainClass = arg[String]()
+  var timeout       = opt[Int](default = 1800, description = "How many seconds the app can run before it times out")
+  var jvmOpts       = opt[Option[String]]()
+  var mainClass     = arg[String]()
   var mainClassArgs = arg[Option[String]](required = false)
 
-  def run() = {
-    val status = SandBox.fork("bin/*", mainClass, timeout.seconds, mainClassArgs.map(_.split(" ").toList).getOrElse(List.empty))
-    println(s"Sandbox finished with status $status, exiting ...")
-    System.exit(status)
-  }
+  def run(): Unit =
+    System.exit(Fork.await(Fork.run(mainClass, "bin/*", jvmOpts, mainClassArgs), timeout.seconds))
 }
 
-object MasterCmd extends Command(name = "master", description = "launches master") with Service {
-  import Service._
+object MasterCmd extends Command(name = "master", description = "launches master") with ClusterService {
+  import ClusterService._
 
   var taskTimeout  = opt[Int](default = 60*60, description = "timeout for a task in seconds")
   var masterId     = opt[String](default = "master", name="master-id")
-  var redisAddress = arg[Address](name="redis-address", description = "host:port of redis")
+  var redisAddress = arg[HostAddress](name="redis-address", description = "host:port of redis")
 
   def run(): Unit = {
     val redisPassword = sys.env.getOrElse("REDIS_PASSWORD", throw new IllegalArgumentException("REDIS_PASSWORD env var must defined !!!"))
     val system = buildClusterSystem(redisAddress, redisPassword, hostAddress, seedNodes, seedNodes.size)
-    backendSingletonActorRef(taskTimeout.seconds, system, masterId)()
+    clusterSingletonActorRef(taskTimeout.seconds, system, masterId)()
+    system.whenTerminated.onComplete(_ => System.exit(0))(ExecutionContext.Implicits.global)
     sys.addShutdownHook(Await.result(system.terminate(), 10.seconds))
   }
 
 }
 
-object WorkerCmd extends Command(name = "workers", description = "launches workers") with Service {
-  import Service._
+object WorkerCmd extends Command(name = "workers", description = "launches workers") with ClusterService {
 
   var consumerGroups  = opt[List[String]](default = List("default"), description = "sum,add,divide - 3 workers in 3 consumer groups")
   var pod             = opt[String](default = "default", description = "Workers within the same pod are executing sequentially")
   var masterId        = opt[String](default = "master", name="master-id")
   var taskTimeout     = opt[Int](default = 60*60, description = "timeout for a task in seconds")
+  var sandboxJvmOpts  = opt[Option[String]](name = "sandbox-jvm-opts", description = "Whether to execute task in a forked process and with what JVM options")
   var executorClass   = arg[String](name="executor-class", description = "Full class name of executor Actor, otherwise identity ping/pong executor will be used")
   var executorArgs    = arg[Option[String]](required = false, name="executor-args", description = "Arguments to be passed to forked executor jvm process")
 
+  private def workerActorRef(masterId: String, clusterClient: ActorRef, workerId: WorkerId, taskTimeout: FiniteDuration, executorProps: Props, system: ActorSystem): ActorRef =
+    system.actorOf(Worker.props(masterId, clusterClient, workerId, executorProps, taskTimeout), s"worker-${workerId.id}")
+
+  private def workerClusterClient(seedNodes: List[HostAddress], system: ActorSystem): ActorRef = {
+    val initialContacts =
+      seedNodes
+        .map { case HostAddress(host, port) => s"akka.tcp://ClusterSystem@$host:$port" }
+        .map { case AddressFromURIString(addr) => RootActorPath(addr) / "system" / "receptionist" }
+        .toSet
+    system.actorOf(ClusterClient.props(ClusterClientSettings(system).withInitialContacts(initialContacts)), "clusterClient")
+  }
+
   def run(): Unit = {
-    val system = buildWorkerSystem(hostAddress)
+
+    val system = RemoteService.buildRemoteSystem(Address("akka.tcp", Worker.SystemName, Some(hostAddress.host), Some(hostAddress.port)))
     val clusterClient = workerClusterClient(seedNodes, system)
+    val executorProps = Props(Class.forName(executorClass), executorArgs.map(_.split(" ").filter(_.nonEmpty).toSeq).getOrElse(Seq.empty))
     consumerGroups.foreach { consumerGroup =>
       workerActorRef(
         masterId,
         clusterClient,
         WorkerId(consumerGroup, pod),
         taskTimeout.seconds,
-        Class.forName(executorClass),
-        executorArgs.map(_.split(" ").filter(_.nonEmpty).toSeq).getOrElse(Seq.empty),
+        sandboxJvmOpts.fold(SandBox.defaultProps(executorProps))(opts => SandBox.forkProps(executorProps, ForkedJvm("bin/*", opts))),
         system
       )
     }
+    system.whenTerminated.onComplete(_ => System.exit(0))(ExecutionContext.Implicits.global)
     sys.addShutdownHook(Await.result(system.terminate(), 10.seconds))
   }
 

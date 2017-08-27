@@ -9,10 +9,14 @@ class Consumer extends Actor with ActorLogging {
 
   mediator ! DistributedPubSubMediator.Subscribe(Client.MasterId, self)
 
+  override def preStart(): Unit = {
+    log.info("Consumer started ...")
+  }
+
   def receive = {
     case _: DistributedPubSubMediator.SubscribeAck =>
       log.info("Subscribed to mediator ...")
-    case TaskResult(task, result) =>
+    case TaskResult(_, result) =>
       log.info("Consumed result: {}", result)
   }
 

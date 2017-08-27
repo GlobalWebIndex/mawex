@@ -1,11 +1,11 @@
 package gwi.mawex
 
 import java.util.UUID
+import java.util.concurrent.ThreadLocalRandom
 
 import akka.actor.{Actor, ActorLogging, ActorRef}
 
 import scala.concurrent.duration._
-import scala.concurrent.forkjoin.ThreadLocalRandom
 
 object Producer {
   case object Tick
@@ -21,8 +21,10 @@ class Producer(masterProxy: ActorRef) extends Actor with ActorLogging {
 
   private[this] var n = 0
 
-  override def preStart(): Unit =
+  override def preStart(): Unit = {
+    log.info("Producer started ...")
     scheduler.scheduleOnce(5.seconds, self, Tick)
+  }
 
   // override postRestart so we don't call preStart and schedule a new Tick
   override def postRestart(reason: Throwable): Unit = ()

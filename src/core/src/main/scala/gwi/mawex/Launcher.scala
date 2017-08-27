@@ -152,18 +152,18 @@ object MasterCmd extends Command(name = "master", description = "launches master
     system.whenTerminated.onComplete(_ => System.exit(0))(ExecutionContext.Implicits.global)
     sys.addShutdownHook(Await.result(system.terminate(), 10.seconds))
   }
-
 }
 
 object WorkerCmd extends Command(name = "workers", description = "launches workers") with ClusterService {
 
-  var consumerGroups  = opt[List[String]](default = List("default"), description = "sum,add,divide - 3 workers in 3 consumer groups")
-  var pod             = opt[String](default = "default", description = "Workers within the same pod are executing sequentially")
-  var masterId        = opt[String](default = "master", name="master-id")
-  var taskTimeout     = opt[Int](default = 60*60, description = "timeout for a task in seconds")
-  var sandboxJvmOpts  = opt[Option[String]](name = "sandbox-jvm-opts", description = "Whether to execute task in a forked process and with what JVM options")
-  var executorClass   = arg[String](name="executor-class", description = "Full class name of executor Actor, otherwise identity ping/pong executor will be used")
-  var executorArgs    = arg[Option[String]](required = false, name="executor-args", description = "Arguments to be passed to forked executor jvm process")
+  var consumerGroups      = opt[List[String]](default = List("default"), description = "sum,add,divide - 3 workers in 3 consumer groups")
+  var pod                 = opt[String](default = "default", description = "Workers within the same pod are executing sequentially")
+  var masterId            = opt[String](default = "master", name="master-id")
+  var taskTimeout         = opt[Int](default = 60*60, description = "timeout for a task in seconds")
+  var sandboxJvmOpts      = opt[Option[String]](name = "sandbox-jvm-opts", description = "Whether to execute task in a forked process and with what JVM options")
+  var executorClass       = arg[String](name="executor-class", description = "Full class name of executor Actor")
+  var commandBuilderClass = arg[Option[String]](name="command-builder-class", description = "Full class name of MawexCommandBuilder")
+  var commandBuilderArgs  = arg[Option[String]](required = false, name="command-args", description = "Arguments to be passed to MawexCommandBuilder")
 
   private def workerActorRef(masterId: String, clusterClient: ActorRef, workerId: WorkerId, taskTimeout: FiniteDuration, executorProps: Props, system: ActorSystem): ActorRef =
     system.actorOf(Worker.props(masterId, clusterClient, workerId, executorProps, taskTimeout), s"worker-${workerId.id}")
@@ -177,11 +177,20 @@ object WorkerCmd extends Command(name = "workers", description = "launches worke
     system.actorOf(ClusterClient.props(ClusterClientSettings(system).withInitialContacts(initialContacts)), "clusterClient")
   }
 
-  def run(): Unit = {
+  private def buildCommand(clazz: Class[_], args: Seq[String]) = {
+    Cli.parse(("command" +: args).toArray)
+      .withCommands(clazz.newInstance().asInstanceOf[MawexCommandBuilder[MawexCommand]])
+      .map(_.build)
+      .getOrElse(throw new IllegalArgumentException(s"Invalid arguments : " + args.mkString("\n", "\n", "\n")))
+  }
 
+  def run(): Unit = {
     val system = RemoteService.buildRemoteSystem(Address("akka.tcp", Worker.SystemName, Some(hostAddress.host), Some(hostAddress.port)))
     val clusterClient = workerClusterClient(seedNodes, system)
-    val executorProps = Props(Class.forName(executorClass), executorArgs.map(_.split(" ").filter(_.nonEmpty).toSeq).getOrElse(Seq.empty))
+    val commandArgSeq = commandBuilderArgs.map(_.split(" ").filter(_.nonEmpty).toSeq).getOrElse(Seq.empty)
+    val commandOpt = commandBuilderClass.map( className => buildCommand(Class.forName(className), commandArgSeq) )
+    val executorClazz = Class.forName(executorClass)
+    val executorProps = commandOpt.fold(Props(executorClazz))(cmd => Props(executorClazz, cmd))
     consumerGroups.foreach { consumerGroup =>
       workerActorRef(
         masterId,

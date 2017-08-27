@@ -1,5 +1,6 @@
 package gwi.mawex
 
+import org.backuity.clist.Command
 import scala.util.Try
 
 /**
@@ -28,4 +29,9 @@ object p2c {
   case class Rejected(taskId: TaskId) extends TaskSubmission
 }
 
+abstract class MawexCommandBuilder[C <: MawexCommand] extends Command(name = "command") {
+  def build: C
+}
 
+/** Must be serializable */
+trait MawexCommand

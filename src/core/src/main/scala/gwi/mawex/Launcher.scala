@@ -162,7 +162,7 @@ object WorkerCmd extends Command(name = "workers", description = "launches worke
   var taskTimeout         = opt[Int](default = 60*60, description = "timeout for a task in seconds")
   var sandboxJvmOpts      = opt[Option[String]](name = "sandbox-jvm-opts", description = "Whether to execute task in a forked process and with what JVM options")
   var executorClass       = arg[String](name="executor-class", description = "Full class name of executor Actor")
-  var commandBuilderClass = arg[Option[String]](name="command-builder-class", description = "Full class name of MawexCommandBuilder")
+  var commandBuilderClass = arg[Option[String]](required = false, name="command-builder-class", description = "Full class name of MawexCommandBuilder")
   var commandBuilderArgs  = arg[Option[String]](required = false, name="command-args", description = "Arguments to be passed to MawexCommandBuilder")
 
   private def workerActorRef(masterId: String, clusterClient: ActorRef, workerId: WorkerId, taskTimeout: FiniteDuration, executorProps: Props, system: ActorSystem): ActorRef =

@@ -20,6 +20,16 @@ protected[mawex] object m2w {
   case class TaskResultAck(taskId: TaskId) extends Master2WorkerCommand
 }
 
+/** SandBox => Executor */
+object s2e {
+  case object TerminateExecutor
+}
+
+/** Executor => SandBox */
+object e2s {
+  case object RegisterExecutor
+}
+
 /** Testing */
 protected[mawex] case object GetMawexState
 protected[mawex] case class MawexState(workState: State, workersById: Map[WorkerId, WorkerRef])

@@ -1,33 +1,28 @@
 package gwi.mawex
 
-import akka.actor.SupervisorStrategy.{Resume, Stop}
+import akka.actor.SupervisorStrategy.{Restart, Stop}
 import akka.actor._
 import akka.cluster.client.ClusterClient.SendToAll
 
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
-class Worker(masterId: String, clusterClient: ActorRef, workerId: WorkerId, workExecutorProps: Props, taskTimeout: FiniteDuration, checkinInterval: FiniteDuration) extends Actor with ActorLogging {
+class Worker(masterId: String, clusterClient: ActorRef, workerId: WorkerId, executorProps: Props, taskTimeout: FiniteDuration, checkinInterval: FiniteDuration) extends Actor with ActorLogging {
   import Worker._
   import context.dispatcher
 
   private[this] val MasterAddress = s"/user/$masterId/singleton"
   private[this] val checkinWorker = master_checkMeInPeriodically
-  private[this] val taskExecutor  = context.watch(context.actorOf(workExecutorProps, "exec"))
+  private[this] val taskExecutor  = context.actorOf(executorProps, SandBox.ActorName)
   private[this] var currentTaskId = Option.empty[TaskId]
-
-  private[this] def taskId: TaskId = currentTaskId match {
-    case Some(taskId) => taskId
-    case None         => throw new IllegalStateException("Not working")
-  }
 
   override def supervisorStrategy = OneForOneStrategy() {
     case _: ActorInitializationException => Stop
     case _: DeathPactException           => Stop
     case ex: Exception =>
       log.error(ex, "Executor crashed !!!")
-      currentTaskId.foreach ( _ => master_finishTask(Failure(ex)) )
-      Resume
+      currentTaskId.foreach(master_finishTask(_, Failure(ex)))
+      Restart
   }
 
   override def postStop(): Unit = {
@@ -45,7 +40,7 @@ class Worker(masterId: String, clusterClient: ActorRef, workerId: WorkerId, work
   private[this] def master_checkMeInPeriodically =
     context.system.scheduler.schedule(5.millis, checkinInterval, clusterClient, SendToAll(MasterAddress, w2m.CheckIn(workerId)))
 
-  private[this] def master_finishTask(result: Try[Any]) = {
+  private[this] def master_finishTask(taskId: TaskId, result: Try[Any]) = {
     clusterClient ! SendToAll(MasterAddress, w2m.TaskFinished(workerId, taskId, result))
     context.setReceiveTimeout(5.seconds)
     context.become(waitingForAck(result))
@@ -57,10 +52,10 @@ class Worker(masterId: String, clusterClient: ActorRef, workerId: WorkerId, work
     case m2w.TaskReady =>
       master_giveMeTask()
 
-    case task@Task(id, job) =>
+    case task@Task(id, _) =>
       log.info("Got task: {}", task)
       currentTaskId = Some(id)
-      taskExecutor ! job
+      taskExecutor ! task
       context.setReceiveTimeout(taskTimeout)
       context.become(working)
   }
@@ -68,31 +63,29 @@ class Worker(masterId: String, clusterClient: ActorRef, workerId: WorkerId, work
   def working: Receive = {
     case e2w.TaskExecuted(result) =>
       log.info("Task is complete. Result {}", result)
-      master_finishTask(result)
+      master_finishTask(currentTaskId.get, result)
     case ReceiveTimeout =>
-      log.info("No response from Executor to Worker ...")
-      master_finishTask(Failure(new RuntimeException(s"Task $taskId timed out in worker $workerId ...")))
+      log.warning("No response from Executor to Worker ...")
+      taskExecutor ! Kill
+      master_finishTask(currentTaskId.get, Failure(new RuntimeException(s"Task $currentTaskId timed out in worker $workerId ...")))
   }
 
   def waitingForAck(result: Try[Any]): Receive = {
-    case m2w.TaskResultAck(id) if id == taskId =>
-      master_giveMeTask()
+    case m2w.TaskResultAck(id) if currentTaskId.contains(id) =>
+      currentTaskId = Option.empty
       context.setReceiveTimeout(Duration.Undefined)
       context.become(idle)
+      master_giveMeTask()
     case ReceiveTimeout =>
       log.info("No ack to Worker from Master, retrying ...")
-      master_finishTask(result)
-  }
-
-  override def unhandled(message: Any): Unit = message match {
-    case Terminated(`taskExecutor`) => context.stop(self)
-    case _                          => super.unhandled(message)
+      master_finishTask(currentTaskId.get, result)
   }
 
 }
 
 object Worker {
   import scala.language.implicitConversions
+  val SystemName = "WorkerSystem"
 
   implicit def tryToEither[A](obj: Try[A]): Either[String, A] = {
     obj match {

@@ -1,14 +1,14 @@
 package gwi.mawex
 
 import akka.actor.{Actor, ActorLogging}
-import gwi.mawex.Service.Address
 
 import scala.util.Success
 
 class ExampleExecutor(args: Seq[String]) extends Actor with ActorLogging {
 
-  // In real world, remote client would be a standalone service/container, here we start it from a Worker service to avoid building it
-  Client.startRemoteClient(Address("workers", 0), List(Address("master-a", 2552), Address("master-b", 2551)))
+  override def preStart(): Unit = {
+    log.info("ExampleExecutor started ...")
+  }
 
   def receive = {
     case n: Int =>

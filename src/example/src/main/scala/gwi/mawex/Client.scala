@@ -3,20 +3,18 @@ package gwi.mawex
 import akka.actor.{ActorSystem, AddressFromURIString, Props, RootActorPath}
 import akka.cluster.Cluster
 import com.typesafe.config.ConfigFactory
-import gwi.mawex.Service.Address
+import gwi.mawex.RemoteService.HostAddress
+import org.backuity.clist.CliMain
 
-object Client {
+object Client extends CliMain[Unit](name = "client", description = "launches client") with ClusterService {
 
   val MasterId = "master"
 
-  def startRemoteClient(hostAddress: Address, seedNodes: List[Address]): Unit = {
+  private def startRemoteClient(hostAddress: HostAddress, seedNodes: List[HostAddress]): Unit = {
     val conf = ConfigFactory.parseString(
       s"""
       akka {
-        actor {
-          provider = cluster
-          kryo.idstrategy = automatic
-        }
+        actor.provider = "cluster"
         remote.netty.tcp.hostname = ${hostAddress.host}
         remote.netty.tcp.port = ${hostAddress.port}
       }
@@ -26,8 +24,8 @@ object Client {
 
     implicit val system = ActorSystem("ClusterSystem", conf)
 
-    val initialContacts = seedNodes.map { case Address(host, port) => RootActorPath(AddressFromURIString(s"akka.tcp://ClusterSystem@$host:$port")) / "system" / "receptionist" }.toSet
-    val seedNodeAddresses = seedNodes.map { case Address(host, port) => AddressFromURIString(s"akka.tcp://ClusterSystem@$host:$port") }.toVector
+    val initialContacts = seedNodes.map { case HostAddress(host, port) => RootActorPath(AddressFromURIString(s"akka.tcp://ClusterSystem@$host:$port")) / "system" / "receptionist" }.toSet
+    val seedNodeAddresses = seedNodes.map { case HostAddress(host, port) => AddressFromURIString(s"akka.tcp://ClusterSystem@$host:$port") }.toVector
 
     Cluster(system).joinSeedNodes(seedNodeAddresses)
 
@@ -36,4 +34,5 @@ object Client {
     system.actorOf(Props[Consumer], "consumer")
   }
 
+  override def run: Unit = startRemoteClient(hostAddress, seedNodes)
 }

@@ -28,11 +28,15 @@ services:
             - REDIS_PASSWORD=foo
         command: master --redis-address=redis:6379 --host-address=master-b:2551 --seed-nodes=master-a:2552,master-b:2551
 
-    # note that this container contains also a client service in example.Executor which doesn't make sense in real world where it would reside in its own container
-    # I used to have a client docker container with a sample app but there was just too much boilerplate code to maintain, see example.Executor
     workers:
         image: gwiq/mawex-example-worker:latest
         depends_on:
             - master-a
             - master-b
-        command: workers --host-address=workers:0 --seed-nodes=master-a:2552,master-b:2551 gwi.mawex.ExampleExecutor
+        command: workers --host-address=workers:0 --seed-nodes=master-a:2552,master-b:2551 --sandbox-jvm-opts=-Xmx64m gwi.mawex.ExampleExecutor
+
+    client:
+        image: gwiq/mawex-example-client:latest
+        depends_on:
+            - workers
+        command: --host-address=client:0 --seed-nodes=master-a:2552,master-b:2551

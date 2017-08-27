@@ -28,7 +28,7 @@ class DefaultMawexSpec(_system: ActorSystem) extends AbstractMawexSpec(_system: 
 
 class ForkedMawexSpec(_system: ActorSystem) extends AbstractMawexSpec(_system: ActorSystem) {
   def this() = this(ClusterService.buildClusterSystem(HostAddress("localhost", 6379), "foo", HostAddress("localhost", 0), List.empty, 1))
-  protected def executorProps(underlyingProps: Props): Props = SandBox.forkProps(underlyingProps, ForkedJvm(System.getProperty("java.class.path"), "-Xmx32m"))
+  protected def executorProps(underlyingProps: Props): Props = SandBox.forkProps(underlyingProps, ForkedJvm(System.getProperty("java.class.path"), "-Xmx48m -XX:TieredStopAtLevel=1 -Xverify:none"))
   protected def singleMsgTimeout: FiniteDuration = 3.second
 }
 

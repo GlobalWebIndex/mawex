@@ -10,7 +10,7 @@ import scala.concurrent.duration.FiniteDuration
 protected[mawex] sealed trait WorkerStatus
 protected[mawex] case object Idle extends WorkerStatus
 protected[mawex] case class Busy(taskId: TaskId) extends WorkerStatus
-protected[mawex] case class WorkerRef(ref: ActorRef, status: WorkerStatus, registrationTime: Long, lastTaskOfferNanoTime: Option[Long])
+protected[mawex] case class WorkerRef(ref: ActorRef, status: WorkerStatus, registrationTime: Long, lastTaskSubmissionTime: Option[Long])
 
 protected[mawex] object WorkerRef {
 
@@ -30,8 +30,9 @@ protected[mawex] object WorkerRef {
 
     def getBusyWorkers(pod: String): Set[WorkerId] = underlying.collect { case (id@WorkerId(_, wPod, _), WorkerRef(_, Busy(_), _, _)) if wPod == pod => id }.toSet
 
-    def employ(workerId: WorkerId, taskId: TaskId): mutable.Map[WorkerId, WorkerRef] =
-      adjust(workerId)(_.get.copy(status = Busy(taskId)))
+    def employ(workerId: WorkerId, taskId: TaskId): mutable.Map[WorkerId, WorkerRef] = {
+      adjust(workerId)(_.get.copy(status = Busy(taskId), lastTaskSubmissionTime = Some(Master.distinctCurrentMillis)))
+    }
 
     def idle(workerId: WorkerId, taskId: TaskId)(implicit log: LoggingAdapter): Unit =
       underlying.get(workerId) match {
@@ -64,14 +65,10 @@ protected[mawex] object WorkerRef {
     private[this] def getIdleWorkerRefs(consumerGroup: String): Seq[(WorkerId, WorkerRef)] =
       underlying.toSeq
         .collect { case t@(WorkerId(wGroup, wPod, _), WorkerRef(_, Idle, _, _)) if wGroup == consumerGroup && getBusyWorkers(wPod).isEmpty => t }(breakOut)
-        .sortBy( worker => worker._2.lastTaskOfferNanoTime.getOrElse(worker._2.registrationTime) )
+        .sortBy( worker => worker._2.lastTaskSubmissionTime.getOrElse(worker._2.registrationTime) )
 
     def offerTask(consumerGroup: String): Unit =
-      getIdleWorkerRefs(consumerGroup).foreach { case (workerId, workerRef) =>
-        val offerTime = System.nanoTime()
-        workerRef.ref ! m2w.TaskReady
-        underlying += (workerId -> workerRef.copy(lastTaskOfferNanoTime = Some(offerTime)))
-      }
+      getIdleWorkerRefs(consumerGroup).foreach { case (_, workerRef) => workerRef.ref ! m2w.TaskReady }
 
     def checkOut(workerId: WorkerId, context: ActorContext)(implicit log: LoggingAdapter): Option[TaskId] = {
       val workerStatusOpt = underlying.get(workerId)

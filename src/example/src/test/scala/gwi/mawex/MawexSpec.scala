@@ -95,7 +95,7 @@ abstract class AbstractMawexSpec(_system: ActorSystem) extends TestKit(_system) 
     val workerRefs =
       workerSpots.map { case WorkerDef(workerId, props) =>
         val workerRef = workerSystem.actorOf(Worker.props(MasterId, clusterWorkerClient, workerId, props, singleMsgTimeout * 14, 1.second), s"worker-${workerId.id}")
-        Thread.sleep(50)
+        Thread.sleep(40)
         workerId -> workerRef
       }
     try
@@ -168,7 +168,7 @@ abstract class AbstractMawexSpec(_system: ActorSystem) extends TestKit(_system) 
         assertStatus(Set.empty, Set.empty, _ == (1 until taskCounter.get).map(_.toString).toVector, Map("1" -> Idle))
         forWorkersDo(WorkerDef(WorkerId(ConsumerGroup, "2", "2"), executorProps(TestExecutor.identifyProps))) {  _ =>
           submitTasksAndValidate(2, _ => ConsumerGroup)
-          assertStatus(Set.empty, Set.empty, done => assertResult((1 until taskCounter.get).map(_.toString).toVector)(done), Map("1" -> Idle, "2" -> Idle))
+          assertStatus(Set.empty, Set.empty, done => assertResult((1 until taskCounter.get).map(_.toString).toSet)(done.toSet), Map("1" -> Idle, "2" -> Idle))
         }
       }
     }
@@ -180,7 +180,7 @@ abstract class AbstractMawexSpec(_system: ActorSystem) extends TestKit(_system) 
           workerSystem.stop(workerRef)
         }
         submitTasksAndValidate(1, _ => ConsumerGroup)
-        assertStatus(Set.empty, Set.empty, done => assertResult(done)((1 until taskCounter.get).map(_.toString).toVector), Map("4" -> Idle))
+        assertStatus(Set.empty, Set.empty, done => assertResult((1 until taskCounter.get).map(_.toString).toSet)(done.toSet), Map("4" -> Idle))
 
       }
     }

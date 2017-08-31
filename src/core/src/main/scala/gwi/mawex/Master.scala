@@ -154,6 +154,12 @@ class Master(masterId: String, taskTimeout: FiniteDuration, workerCheckinInterva
 
 object Master {
 
+  /** System.nanoTime() is a relative time, probably not thread-safe, working with timers of lower precision than 1 millisecond is very hard, using Thread.sleep(1) is a reasonable trade-off */
+  def distinctCurrentMillis: Long = {
+    Thread.sleep(1)
+    System.currentTimeMillis()
+  }
+
   protected[mawex] sealed trait HeartBeat
   protected[mawex] case object Validate extends HeartBeat
   protected[mawex] case object Cleanup extends HeartBeat

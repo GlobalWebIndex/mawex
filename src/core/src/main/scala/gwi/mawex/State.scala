@@ -44,12 +44,12 @@ case class State private(private val pendingTasks: Map[Task, Long], private val 
 
   def updated(event: TaskDomainEvent): State = event match {
     case TaskAccepted(task) =>
-      copy(pendingTasks = pendingTasks.updated(task, System.currentTimeMillis))
+      copy(pendingTasks = pendingTasks.updated(task, Master.distinctCurrentMillis))
 
     case TaskStarted(taskId) =>
       val task = pendingTasks.find(_._1.id == taskId).map(_._1).getOrElse(throw new IllegalStateException("Very unexpectedly, accepted task is missing !!!"))
       val rest = pendingTasks.filter(_._1.id != taskId)
-      copy(pendingTasks = rest, progressingTasks = progressingTasks + (task -> System.currentTimeMillis()))
+      copy(pendingTasks = rest, progressingTasks = progressingTasks + (task -> Master.distinctCurrentMillis))
 
     case TaskCompleted(taskId, _) =>
       val task = getTaskInProgress(taskId).getOrElse(throw new IllegalStateException("Very unexpectedly, progressing task is missing to complete !!!"))

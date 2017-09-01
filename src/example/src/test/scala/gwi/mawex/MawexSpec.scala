@@ -57,8 +57,8 @@ abstract class AbstractMawexSpec(_system: ActorSystem) extends TestKit(_system) 
       system.terminate(),
       workerSystem.terminate()
     ))
-
     Await.ready(allTerminated, Duration.Inf)
+    Thread.sleep(2000)
   }
 
   private[this] def initSystems = {
@@ -108,12 +108,12 @@ abstract class AbstractMawexSpec(_system: ActorSystem) extends TestKit(_system) 
 
   private[this] def receiveResults(n: Int) = probe.receiveN(n, singleMsgTimeout * n).map { case r: TaskResult => r }.partition(_.result.isSuccess)
 
-  private[this] def assertStatus(pending: Set[String], progressing: Set[String], done: Vector[String] => Unit, workerStatusById: Map[String, WorkerStatus]) = {
+  private[this] def assertStatus(pending: Set[String], progressing: Set[String], done: Vector[String] => Unit, workerStatus: Map[String, WorkerStatus] => Unit) = {
     masterProxy ! GetMawexState
     val MawexState(State(actualPending, actualProgressing, actualDone), workersById) = expectMsgType[MawexState]
     assertResult(pending)(actualPending.keySet.map(_.id.id))
     assertResult(progressing)(actualProgressing.keySet.map(_.id.id))
-    assertResult(workerStatusById)(workersById.map { case (workerId, workerRef) => workerId.id -> workerRef.status })
+    workerStatus(workersById.map { case (workerId, workerRef) => workerId.id -> workerRef.status })
     done(actualDone.map(_.id))
   }
 
@@ -139,7 +139,7 @@ abstract class AbstractMawexSpec(_system: ActorSystem) extends TestKit(_system) 
         masterProxy ! Task(taskId, 1)
         expectMsg(singleMsgTimeout, p2c.Accepted(taskId))
         probe.expectMsgType[TaskResult](singleMsgTimeout).task.id should be(TaskId(nextTaskId.toString, ConsumerGroup))
-        assertStatus(Set.empty, Set.empty, done => assertResult(Vector(nextTaskId.toString))(done), Map("1" -> Idle))
+        assertStatus(Set.empty, Set.empty, done => assertResult(Vector(nextTaskId.toString))(done), workerStatus => assertResult(Map("1" -> Idle))(workerStatus))
       }
     }
 
@@ -154,7 +154,7 @@ abstract class AbstractMawexSpec(_system: ActorSystem) extends TestKit(_system) 
         val (successes, failures) = receiveResults(6)
         assert(failures.size == 2)
         assert(successes.size == 4)
-        assertStatus(Set.empty, Set.empty, done => assertResult((1 until taskCounter.get).map(_.toString).toVector)(done), (1 to 3).map(n => n.toString -> Idle).toMap)
+        assertStatus(Set.empty, Set.empty, done => assertResult((1 until taskCounter.get).map(_.toString).toVector)(done), workerStatus => assertResult((1 to 3).map(n => n.toString -> Idle).toMap)(workerStatus))
       }
     }
 
@@ -165,10 +165,10 @@ abstract class AbstractMawexSpec(_system: ActorSystem) extends TestKit(_system) 
         masterProxy ! Task(taskId, 1)
         expectMsg(p2c.Accepted(taskId))
         probe.expectMsgType[TaskResult](singleMsgTimeout).task.id should be(TaskId(nextTaskId.toString, ConsumerGroup))
-        assertStatus(Set.empty, Set.empty, _ == (1 until taskCounter.get).map(_.toString).toVector, Map("1" -> Idle))
+        assertStatus(Set.empty, Set.empty, _ == (1 until taskCounter.get).map(_.toString).toVector, workerStatus => assertResult(Map("1" -> Idle))(workerStatus))
         forWorkersDo(WorkerDef(WorkerId(ConsumerGroup, "2", "2"), executorProps(TestExecutor.identifyProps))) {  _ =>
           submitTasksAndValidate(2, _ => ConsumerGroup)
-          assertStatus(Set.empty, Set.empty, done => assertResult((1 until taskCounter.get).map(_.toString).toSet)(done.toSet), Map("1" -> Idle, "2" -> Idle))
+          assertStatus(Set.empty, Set.empty, done => assertResult((1 until taskCounter.get).map(_.toString).toSet)(done.toSet), workerStatus => assertResult(Map("1" -> Idle, "2" -> Idle))(workerStatus))
         }
       }
     }
@@ -180,7 +180,7 @@ abstract class AbstractMawexSpec(_system: ActorSystem) extends TestKit(_system) 
           workerSystem.stop(workerRef)
         }
         submitTasksAndValidate(1, _ => ConsumerGroup)
-        assertStatus(Set.empty, Set.empty, done => assertResult((1 until taskCounter.get).map(_.toString).toSet)(done.toSet), Map("4" -> Idle))
+        assertStatus(Set.empty, Set.empty, done => assertResult((1 until taskCounter.get).map(_.toString).toSet)(done.toSet), workerStatus => assertResult(Map("4" -> Idle))(workerStatus))
 
       }
     }
@@ -189,15 +189,15 @@ abstract class AbstractMawexSpec(_system: ActorSystem) extends TestKit(_system) 
       val workerDef = WorkerDef(WorkerId(ConsumerGroup, "1", "1"), executorProps(TestExecutor.identifyProps))
       forWorkersDo(workerDef) { workerRefs =>
         eventually (timeout(Span(2, Seconds)), interval(Span(100, Millis))) {
-          assertStatus(Set.empty, Set.empty, _ => (), Map("1" -> Idle))
+          assertStatus(Set.empty, Set.empty, _ => (), workerStatus => assertResult(Map("1" -> Idle))(workerStatus))
         }
         workerSystem.stop(workerRefs.head._2)
         eventually (timeout(Span(2, Seconds)), interval(Span(100, Millis))) {
-          assertStatus(Set.empty, Set.empty, _ => (), Map.empty)
+          assertStatus(Set.empty, Set.empty, _ => (), workerStatus => assertResult(Map.empty)(workerStatus))
         }
         forWorkersDo(workerDef) { _ =>
           eventually (timeout(Span(2, Seconds)), interval(Span(100, Millis))) {
-            assertStatus(Set.empty, Set.empty, _ => (), Map("1" -> Idle))
+            assertStatus(Set.empty, Set.empty, _ => (), workerStatus => assertResult(Map("1" -> Idle))(workerStatus))
           }
         }
       }
@@ -207,7 +207,7 @@ abstract class AbstractMawexSpec(_system: ActorSystem) extends TestKit(_system) 
       val running = new AtomicBoolean(false)
       forWorkersDo((1 to 3).map(n => WorkerDef(WorkerId(n.toString, Pod, n.toString), executorProps(TestExecutor.evalProps(Some(TestExecutor.runningEvaluation(running, 30)))))): _*) {  _ =>
         submitTasksAndValidate(3, n => ((n%3) + 1).toString)
-        assertStatus(Set.empty, Set.empty, done => assertResult((1 until taskCounter.get).map(_.toString).toSet)(done.toSet), Map("1" -> Idle, "2" -> Idle, "3" -> Idle))
+        assertStatus(Set.empty, Set.empty, done => assertResult((1 until taskCounter.get).map(_.toString).toSet)(done.toSet), workerStatus => assertResult(Map("1" -> Idle, "2" -> Idle, "3" -> Idle))(workerStatus))
       }
     }
 
@@ -223,7 +223,7 @@ abstract class AbstractMawexSpec(_system: ActorSystem) extends TestKit(_system) 
         expectMsg(p2c.Accepted(taskId_1))
         expectMsg(p2c.Accepted(taskId_2))
         Thread.sleep(100)
-        assertStatus(Set.empty, Set(nextTaskId_1, nextTaskId_2), _ => (), Map("1" -> Busy(taskId_1), "2" -> Busy(taskId_2)))
+        assertStatus(Set.empty, Set(nextTaskId_1, nextTaskId_2), _ => (), workerStatus => assertResult(Set(Busy(taskId_1), Busy(taskId_2)))(workerStatus.values.toSet))
         Thread.sleep(singleMsgTimeout.toMillis)
       }
     }

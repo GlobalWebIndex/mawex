@@ -205,14 +205,14 @@ abstract class AbstractMawexSpec(_system: ActorSystem) extends TestKit(_system) 
 
     "execute tasks sequentially by having multiple consumer groups share a pod" in {
       val running = new AtomicBoolean(false)
-      forWorkersDo((1 to 3).map(n => WorkerDef(WorkerId(n.toString, Pod, n.toString), executorProps(TestExecutor.evalProps(Some(TestExecutor.runningEvaluation(running, 30)))))): _*) {  _ =>
+      forWorkersDo((1 to 3).map(n => WorkerDef(WorkerId(n.toString, Pod, n.toString), executorProps(TestExecutor.evalProps(Some(RunningEvaluation(running, 30)))))): _*) {  _ =>
         submitTasksAndValidate(3, n => ((n%3) + 1).toString)
         assertStatus(Set.empty, Set.empty, done => assertResult((1 until taskCounter.get).map(_.toString).toSet)(done.toSet), workerStatus => assertResult(Map("1" -> Idle, "2" -> Idle, "3" -> Idle))(workerStatus))
       }
     }
 
     "load balance work to many workers sharing a consumer group" in {
-      forWorkersDo((1 to 2).map(n => WorkerDef(WorkerId(ConsumerGroup, n.toString, n.toString), executorProps(TestExecutor.evalProps(Some(TestExecutor.sleepEvaluation(400)))))): _*) {  _ =>
+      forWorkersDo((1 to 2).map(n => WorkerDef(WorkerId(ConsumerGroup, n.toString, n.toString), executorProps(TestExecutor.evalProps(Some(SleepEvaluation(400)))))): _*) {  _ =>
         Thread.sleep(300)
         val nextTaskId_1 = taskCounter.getAndIncrement().toString
         val nextTaskId_2 = taskCounter.getAndIncrement().toString
@@ -261,36 +261,46 @@ object AbstractMawexSpec {
         sender() ! e2w.TaskExecuted(result)
     }
   }
-  class TestExecutor(fnOpt: Option[() => Boolean] = Option.empty) extends Actor {
+
+  sealed trait Evaluation {
+    def eval: Boolean
+  }
+
+  case class RunningEvaluation(running: AtomicBoolean, sleep: Int) extends Evaluation {
+    def eval: Boolean = {
+      val wasRunning = running.getAndSet(true)
+      Thread.sleep(sleep)
+      running.set(false)
+      !wasRunning
+    }
+  }
+
+  case class SleepEvaluation(sleep: Int) extends Evaluation {
+    def eval: Boolean = {
+      Thread.sleep(sleep)
+      true
+    }
+  }
+
+  class TestExecutor(evalOpt: Option[Evaluation] = Option.empty) extends Actor {
     def receive = {
       case _ =>
         val result =
-          fnOpt match {
-            case None             => Success(context.parent.path.toString)
-            case Some(fn) if fn() => Success(context.parent.path.toString)
-            case _                => Failure(new RuntimeException("Predicate failed !!!"))
+          evalOpt match {
+            case None =>
+              Success(context.parent.path.toString)
+            case Some(evaluation) if evaluation.eval =>
+              Success(context.parent.path.toString)
+            case _ =>
+              Failure(new RuntimeException("Predicate failed !!!"))
           }
         sender() ! e2w.TaskExecuted(result)
     }
   }
 
   object TestExecutor {
-    def evalProps(fnOpt: Option[() => Boolean]) = Props(classOf[TestExecutor], fnOpt)
+    def evalProps(evalOpt: Option[Evaluation]) = Props(classOf[TestExecutor], evalOpt)
     def identifyProps = Props(classOf[TestExecutor], Option.empty)
-
-    def runningEvaluation(running: AtomicBoolean, sleep: Int): () => Boolean =
-      () => {
-        val wasRunning = running.getAndSet(true)
-        Thread.sleep(sleep)
-        running.set(false)
-        !wasRunning
-      }
-
-    def sleepEvaluation(sleep: Int): () => Boolean =
-      () => {
-        Thread.sleep(sleep)
-        true
-      }
   }
 
   class UnhandledMessageListener extends Actor with ActorLogging {

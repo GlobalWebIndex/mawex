@@ -77,7 +77,7 @@ class ForkingSandBox(executorProps: Props, forkedJvm: ForkedJvm) extends SandBox
 
   def awaitingForkRegistration(worker: ActorRef, job: Any): Receive = {
     case e2s.RegisterExecutor =>
-      val address = sender().path.address.copy(host = Some("127.0.1.1"))
+      val address = sender().path.address
       log.info(s"Forked Executor registered at $address")
       frontDesk = Some(sender())
       context.setReceiveTimeout(Duration.Undefined)

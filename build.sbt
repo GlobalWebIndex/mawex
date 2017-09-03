@@ -8,7 +8,7 @@ crossScalaVersions in ThisBuild := Seq("2.12.3", "2.11.8")
 organization in ThisBuild := "net.globalwebindex"
 
 lazy val mawex = (project in file("."))
-  .aggregate(`mawex-api`, `mawex-core`, `mawex-example-worker`)
+  .aggregate(`mawex-api`, `mawex-core`, `mawex-example-worker`, `mawex-example-client`)
 
 lazy val `mawex-api` = (project in file("src/api"))
   .enablePlugins(CommonPlugin)
@@ -28,8 +28,8 @@ lazy val `mawex-example-worker` = (project in file("src/example"))
   .enablePlugins(CommonPlugin, DockerPlugin)
   .settings(name := "mawex-example-worker")
   .settings(fork in Test := true)
-  .settings(assemblySettings("mawex-example-worker", None))
-  .settings(copyJarTo(s"gwiq/mawex:$mawexVersion", "gwiq", "mawex-example-worker", "mawex"))
+  .settings(assemblySettings("mawex-example-worker", Some("gwi.mawex.Launcher")))
+  .settings(deploySettings("openjdk:8", "gwiq", "mawex-example-worker", "gwi.mawex.Launcher"))
   .dependsOn(`mawex-core` % "compile->compile;test->test")
 
 /** Virtual project that exists merely for building a client docker image */
@@ -38,6 +38,6 @@ lazy val `mawex-example-client` = (project in file("src/example"))
   .settings(name := "mawex-example-client")
   .settings(test in Test := {})
   .settings(target := baseDirectory.value / "target-dry-run")
-  .settings(assemblySettings("mawex-example-worker", None))
+  .settings(assemblySettings("mawex-example-worker", Some("gwi.mawex.Launcher")))
   .settings(deploySettings("java:8", "gwiq", "mawex-example-client", "gwi.mawex.Client"))
   .dependsOn(`mawex-core` % "compile->compile;test->test")

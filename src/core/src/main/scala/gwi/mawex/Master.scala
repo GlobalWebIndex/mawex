@@ -24,8 +24,8 @@ class Master(masterId: String, taskTimeout: FiniteDuration, workerCheckinInterva
 
   // persistenceId must include cluster role to support multiple masters
   override def persistenceId: String = Cluster(context.system).selfRoles.find(_.startsWith("backend-")) match {
-    case Some(role) => role + self.path.name
-    case None       => self.path.name
+    case Some(role) => role + self.path.toStringWithoutAddress
+    case None       => self.path.toStringWithoutAddress
   }
 
   private[this] val workersById = mutable.Map[WorkerId, WorkerRef]() // not event sourced

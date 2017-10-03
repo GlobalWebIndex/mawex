@@ -46,9 +46,11 @@ protected[mawex] object WorkerRef {
       underlying
         .collectFirst { case (workerId, status) if status.ref == ref => workerId }
 
-    def findProgressingOrphanTask(workState: State): Set[Task] =
+    def findProgressingOrphanTask(workState: State): Map[TaskId, Task] =
       workState.getProgressingTasks.keySet
-        .filter ( task => !underlying.exists(_._2.status == Busy(task.id)) )
+        .collect { case task if !underlying.exists(_._2.status == Busy(task.id)) =>
+          task.id -> task
+        }(breakOut)
 
     def validate(workState: State, workerCheckinInterval: FiniteDuration, taskTimeout: FiniteDuration)(implicit log: LoggingAdapter): Unit = {
       for ((workerId, WorkerRef(_, _, registrationTime, _)) <- underlying if (System.currentTimeMillis() - registrationTime) > workerCheckinInterval.toMillis * 6) {

@@ -10,6 +10,7 @@ import gwi.mawex.State._
 
 import scala.collection.mutable
 import scala.concurrent.duration._
+import scala.collection.breakOut
 
 class Master(masterId: String, taskTimeout: FiniteDuration, workerCheckinInterval: FiniteDuration) extends PersistentActor with ActorLogging {
   import Master._
@@ -54,14 +55,12 @@ class Master(masterId: String, taskTimeout: FiniteDuration, workerCheckinInterva
       workersById.validate(workState, workerCheckinInterval, taskTimeout)
 
     case Cleanup =>
-      workersById.findProgressingOrphanTask(workState)
-        .foreach{ task =>
-          log.warning("Orphan processing task, his worker probably died in battle : {} !!!", task)
-          persist(TaskFailed(task.id)) { e =>
-            workState = workState.updated(e)
-            mediator ! DistributedPubSubMediator.Publish(masterId, TaskResult(task, Left(s"Orphan progressing task ${task.id} !!!")))
-          }
-        }
+      val tasksById = workersById.findProgressingOrphanTask(workState)
+      persistAll(tasksById.keys.map(TaskFailed)(breakOut)) { failedEvent =>
+        log.warning("Orphan processing task, his worker probably died in battle : {} !!!", failedEvent)
+        workState = workState.updated(failedEvent)
+        mediator ! DistributedPubSubMediator.Publish(masterId, TaskResult(tasksById(failedEvent.taskId), Left(s"Orphan progressing task ${failedEvent.taskId} !!!")))
+      }
   }
 
   private[this] def handleWorkerCommand(cmd: Worker2MasterCommand) = cmd match {
@@ -86,9 +85,9 @@ class Master(masterId: String, taskTimeout: FiniteDuration, workerCheckinInterva
         workState.getPendingTasks.toSeq.sortBy(_._2).map(_._1)
           .find(_.id.consumerGroup == workerId.consumerGroup)
           .foreach { task =>
-            workersById.get(workerId).filter(_.status == Idle).foreach { _ =>
-              persist(TaskStarted(task.id)) { event =>
-                workState = workState.updated(event)
+            persist(TaskStarted(task.id)) { event =>
+              workState = workState.updated(event)
+              workersById.get(workerId).filter(_.status == Idle).foreach { _ =>
                 log.info("Giving worker {} some task {}", workerId, task.id)
                 workersById.employ(workerId, task.id)
                 s ! task

@@ -1,10 +1,28 @@
 version: '2'
 services:
 
-    redis:
-        image: redis
+    dynamo:
+        image: dwmkerr/dynamodb
         ports:
-            - 6379:6379
+            - 8000:8000
+        command: -sharedDb
+
+    dynamo-init:
+        image: garland/aws-cli-docker
+        environment:
+            - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+            - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+            - AWS_DEFAULT_REGION=eu-west-1
+        depends_on:
+            - dynamo
+        command: aws
+                  --endpoint-url=http://dynamo:8000 dynamodb create-table
+                  --table-name akka-persistence
+                  --attribute-definitions
+                      AttributeName=par,AttributeType=S
+                      AttributeName=num,AttributeType=N
+                  --key-schema AttributeName=par,KeyType=HASH AttributeName=num,KeyType=RANGE
+                  --provisioned-throughput ReadCapacityUnits=1000,WriteCapacityUnits=1000
 
     # master system uses akka cluster Singleton and akka persistence so that if if master-a crashes then master-b takes over
 
@@ -13,20 +31,22 @@ services:
         ports:
             - 2552:2552
         depends_on:
-            - redis
+            - dynamo-init
         environment:
-            - REDIS_PASSWORD=foo
-        command: master --redis-address=redis:6379 --host-address=master-a:2552 --seed-nodes=master-a:2552,master-b:2551
+            - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+            - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+        command: master --dynamo-endpoint=http://dynamo:8000 --host-address=master-a:2552 --seed-nodes=master-a:2552,master-b:2551
 
     master-b:
         image: gwiq/mawex:latest
         ports:
             - 2551:2551
         depends_on:
-            - redis
+            - dynamo-init
         environment:
-            - REDIS_PASSWORD=foo
-        command: master --redis-address=redis:6379 --host-address=master-b:2551 --seed-nodes=master-a:2552,master-b:2551
+            - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+            - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+        command: master --dynamo-endpoint=http://dynamo:8000 --host-address=master-b:2551 --seed-nodes=master-a:2552,master-b:2551
 
     workers:
         image: gwiq/mawex-example-worker:latest

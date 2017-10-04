@@ -59,17 +59,11 @@ object RemoteService {
 
 object ClusterService {
 
-  def buildClusterSystem(redisAddress: HostAddress, redisPassword: String, hostAddress: HostAddress, seedNodes: List[HostAddress], memberSize: Int) =
+  def buildClusterSystem(dynamoEndpoint: String, hostAddress: HostAddress, seedNodes: List[HostAddress], memberSize: Int) =
     ActorSystem(
       "ClusterSystem",
       ConfigFactory.parseString(
         s"""
-          redis {
-            host = ${redisAddress.host}
-            port = ${redisAddress.port}
-            password = $redisPassword
-            sentinel = false
-          }
           akka {
             actor.provider = "cluster"
             cluster {
@@ -78,13 +72,16 @@ object ClusterService {
               min-nr-of-members = $memberSize
             }
             extensions = ["akka.cluster.client.ClusterClientReceptionist", "akka.cluster.pubsub.DistributedPubSub", "com.romix.akka.serialization.kryo.KryoSerializationExtension$$"]
-            akka-persistence-redis.journal.class = "com.hootsuite.akka.persistence.redis.journal.RedisJournal"
-            persistence.journal.plugin = "akka-persistence-redis.journal"
+            persistence.journal.plugin = "my-dynamodb-journal"
             remote.netty.tcp {
                hostname = ${hostAddress.host}
                port = ${hostAddress.port}
                bind-hostname = "0.0.0.0"
             }
+          }
+          my-dynamodb-journal = $${dynamodb-journal}
+          my-dynamodb-journal {
+            endpoint = "$dynamoEndpoint"
           }
           custom-downing {
             stable-after = 20s
@@ -95,10 +92,9 @@ object ClusterService {
             }
           }
           """.stripMargin
-      ).resolve()
-        .withValue("akka.cluster.seed-nodes", ConfigValueFactory.fromIterable(seedNodes.map { case HostAddress(host, port) => s"akka.tcp://ClusterSystem@$host:$port" }.asJava))
+      ).withValue("akka.cluster.seed-nodes", ConfigValueFactory.fromIterable(seedNodes.map { case HostAddress(host, port) => s"akka.tcp://ClusterSystem@$host:$port" }.asJava))
         .withFallback(ConfigFactory.load("serialization"))
-        .withFallback(ConfigFactory.load())
+        .withFallback(ConfigFactory.load()).resolve()
     )
 
   def clusterSingletonActorRef(taskTimeout: FiniteDuration, system: ActorSystem, name: String)(arf: ActorRefFactory = system): ActorRef = {
@@ -141,13 +137,12 @@ object SandBoxCmd extends Command(name = "sandbox", description = "executes arbi
 object MasterCmd extends Command(name = "master", description = "launches master") with ClusterService {
   import ClusterService._
 
-  var taskTimeout  = opt[Int](default = 60*60, description = "timeout for a task in seconds")
-  var masterId     = opt[String](default = "master", name="master-id")
-  var redisAddress = arg[HostAddress](name="redis-address", description = "host:port of redis")
+  var taskTimeout     = opt[Int](default = 60*60, description = "timeout for a task in seconds")
+  var masterId        = opt[String](default = "master", name="master-id")
+  var dynamoEndpoint  = arg[String](name="dynamo-endpoint", description = "dynamo endpoint")
 
   def run(): Unit = {
-    val redisPassword = sys.env.getOrElse("REDIS_PASSWORD", throw new IllegalArgumentException("REDIS_PASSWORD env var must defined !!!"))
-    val system = buildClusterSystem(redisAddress, redisPassword, hostAddress, seedNodes, seedNodes.size)
+    val system = buildClusterSystem(dynamoEndpoint, hostAddress, seedNodes, seedNodes.size)
     clusterSingletonActorRef(taskTimeout.seconds, system, masterId)()
     system.whenTerminated.onComplete(_ => System.exit(0))(ExecutionContext.Implicits.global)
     sys.addShutdownHook(Await.result(system.terminate(), 10.seconds))

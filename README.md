@@ -95,8 +95,9 @@ which is a FSM that sees pipeline as layered DAG and saturates/satisfies depende
 
 ### mawex in action :
 
-Mawex akka persistence is tested with redis only because it is the best fit for mawex unless
-high amount of micro tasks are being submitted to it in which case something like cassandra would be a better fit.
+Mawex akka persistence is tested [akka-persistence-dynamodb](https://github.com/akka/akka-persistence-dynamodb) and redis plugin
+but running it on different storages like cassandra is just a matter of configuration changes, choose a storage based on
+amount and throughput of tasks that are being submitted to it in which case something like cassandra would be a better fit.
 It uses Kryo serialization because event log is persisted only temporarily and it would be deleted on new deploy.
 By default it uses the Oldest node auto-downing strategy for split-brain cases because the cluster is solely about Singleton with actor residing on the oldest node.
 

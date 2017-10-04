@@ -1,5 +1,5 @@
 
-lazy val mawexVersion     = "0.1.6"
+lazy val mawexVersion     = "0.1.7"
 
 lazy val githubOrgUrl     = "https://github.com/GlobalWebIndex"
 
@@ -13,7 +13,7 @@ lazy val mawex = (project in file("."))
 lazy val `mawex-api` = (project in file("src/api"))
   .enablePlugins(CommonPlugin)
   .settings(name := "mawex-api")
-  .settings(libraryDependencies ++= clist ++ Seq(akkaCluster, akkaActor, akkaPersistence, akkaPersistenceRedis, akkaKryoSerialization, akkaClusterCustomDowning, akkaTestkit, scalatest))
+  .settings(libraryDependencies ++= clist ++ Seq(akkaCluster, akkaClusterTools, akkaActor, akkaPersistence, akkaPersistenceDynamoDB, akkaKryoSerialization, akkaClusterCustomDowning, akkaTestkit, scalatest))
   .settings(publishSettings("globalWebIndex", "mawex-api", s3Resolver))
 
 lazy val `mawex-core` = (project in file("src/core"))

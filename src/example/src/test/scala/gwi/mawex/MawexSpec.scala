@@ -21,13 +21,13 @@ import scala.concurrent.{Await, Future}
 import scala.util.{Failure, Success, Try}
 
 class DefaultMawexSpec(_system: ActorSystem) extends AbstractMawexSpec(_system: ActorSystem) {
-  def this() = this(ClusterService.buildClusterSystem("http://localhost:8000", HostAddress("localhost", 0), List.empty, 1))
+  def this() = this(ClusterService.buildClusterSystem(HostAddress("localhost", 0), List.empty, 1))
   protected def executorProps(underlyingProps: Props): Props = SandBox.defaultProps(underlyingProps)
   protected def singleMsgTimeout: FiniteDuration = 700.millis
 }
 
 class ForkedMawexSpec(_system: ActorSystem) extends AbstractMawexSpec(_system: ActorSystem) {
-  def this() = this(ClusterService.buildClusterSystem("http://localhost:8000", HostAddress("localhost", 0), List.empty, 1))
+  def this() = this(ClusterService.buildClusterSystem(HostAddress("localhost", 0), List.empty, 1))
   protected def executorProps(underlyingProps: Props): Props = SandBox.forkProps(underlyingProps, ForkedJvm(System.getProperty("java.class.path"), "-Xmx48m -XX:TieredStopAtLevel=1 -Xverify:none"))
   protected def singleMsgTimeout: FiniteDuration = 3.second
 }
@@ -46,17 +46,11 @@ abstract class AbstractMawexSpec(_system: ActorSystem) extends TestKit(_system) 
   override def beforeAll(): Unit = try super.beforeAll() finally {
     system.eventStream.subscribe(system.actorOf(Props(new UnhandledMessageListener())), classOf[UnhandledMessage])
     system.eventStream.subscribe(workerSystem.actorOf(Props(new UnhandledMessageListener())), classOf[UnhandledMessage])
-    startContainer("dwmkerr/dynamodb", "dynamo-test", Seq(PPorts.from(8000,8000)), Some("-sharedDb")) {
-      startContainer("garland/aws-cli-docker", "dynamo-init", Seq.empty, Some(dynamoInit))(())
-    }
     ClusterService.clusterSingletonActorRef(singleMsgTimeout * 14, system, MasterId)()
   }
 
   override def afterAll(): Unit = {
     import scala.concurrent.ExecutionContext.Implicits.global
-    stopContainer("dynamo-test") {
-      stopContainer("dynamo-init")(())
-    }
     val allTerminated = Future.sequence(Seq(
       system.terminate(),
       workerSystem.terminate()
@@ -248,18 +242,6 @@ object AbstractMawexSpec {
     """.stripMargin
   ).withFallback(ConfigFactory.load("serialization"))
     .withFallback(ConfigFactory.load())
-
-  val dynamoInit =
-    """
-      aws \
-       --endpoint-url=http://localhost:8000 dynamodb create-table \
-       --table-name akka-persistence \
-       --attribute-definitions \
-           AttributeName=par,AttributeType=S \
-           AttributeName=num,AttributeType=N \
-       --key-schema AttributeName=par,KeyType=HASH AttributeName=num,KeyType=RANGE \
-       --provisioned-throughput ReadCapacityUnits=10000,WriteCapacityUnits=10000
-    """.stripMargin
 
   import scala.language.implicitConversions
   implicit def eitherToTry[B](either: Either[String, B]): Try[B] = {

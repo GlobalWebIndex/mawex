@@ -103,7 +103,7 @@ By default it uses the Oldest node auto-downing strategy for split-brain cases b
 
 ```
 $ cd docker
-docker-compose up
+$ docker-compose -f ${plugin}.yml -f mawex.yml up
 ```
 
 ### how-to ( W.I.P. )

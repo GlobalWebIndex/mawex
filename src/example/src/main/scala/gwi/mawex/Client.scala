@@ -19,8 +19,8 @@ object Client extends CliMain[Unit](name = "client", description = "launches cli
         remote.netty.tcp.port = ${hostAddress.port}
       }
       """.stripMargin
-    ).withFallback(ConfigFactory.load("serialization"))
-      .withFallback(ConfigFactory.load())
+    ).withFallback(ConfigFactory.parseResources("serialization.conf"))
+      .withFallback(ConfigFactory.parseResources("reference.conf")).resolve()
 
     implicit val system = ActorSystem("ClusterSystem", conf)
 

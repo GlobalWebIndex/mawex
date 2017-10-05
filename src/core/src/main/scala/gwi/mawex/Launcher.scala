@@ -52,14 +52,14 @@ object RemoteService {
           }
         }
         """.stripMargin
-      ).withFallback(ConfigFactory.load("serialization"))
+      ).withFallback(ConfigFactory.parseResources("serialization.conf"))
         .withFallback(ConfigFactory.load())
     )
 }
 
 object ClusterService {
 
-  def buildClusterSystem(dynamoEndpoint: String, hostAddress: HostAddress, seedNodes: List[HostAddress], memberSize: Int) =
+  def buildClusterSystem(hostAddress: HostAddress, seedNodes: List[HostAddress], memberSize: Int) =
     ActorSystem(
       "ClusterSystem",
       ConfigFactory.parseString(
@@ -72,16 +72,11 @@ object ClusterService {
               min-nr-of-members = $memberSize
             }
             extensions = ["akka.cluster.client.ClusterClientReceptionist", "akka.cluster.pubsub.DistributedPubSub", "com.romix.akka.serialization.kryo.KryoSerializationExtension$$"]
-            persistence.journal.plugin = "my-dynamodb-journal"
             remote.netty.tcp {
                hostname = ${hostAddress.host}
                port = ${hostAddress.port}
                bind-hostname = "0.0.0.0"
             }
-          }
-          my-dynamodb-journal = $${dynamodb-journal}
-          my-dynamodb-journal {
-            endpoint = "$dynamoEndpoint"
           }
           custom-downing {
             stable-after = 20s
@@ -93,8 +88,8 @@ object ClusterService {
           }
           """.stripMargin
       ).withValue("akka.cluster.seed-nodes", ConfigValueFactory.fromIterable(seedNodes.map { case HostAddress(host, port) => s"akka.tcp://ClusterSystem@$host:$port" }.asJava))
-        .withFallback(ConfigFactory.load("serialization"))
-        .withFallback(ConfigFactory.load()).resolve()
+        .withFallback(ConfigFactory.parseResources("serialization.conf"))
+        .withFallback(ConfigFactory.load())
     )
 
   def clusterSingletonActorRef(taskTimeout: FiniteDuration, system: ActorSystem, name: String)(arf: ActorRefFactory = system): ActorRef = {
@@ -137,12 +132,11 @@ object SandBoxCmd extends Command(name = "sandbox", description = "executes arbi
 object MasterCmd extends Command(name = "master", description = "launches master") with ClusterService {
   import ClusterService._
 
-  var taskTimeout     = opt[Int](default = 60*60, description = "timeout for a task in seconds")
-  var masterId        = opt[String](default = "master", name="master-id")
-  var dynamoEndpoint  = arg[String](name="dynamo-endpoint", description = "dynamo endpoint")
+  var taskTimeout       = opt[Int](default = 60*60, description = "timeout for a task in seconds")
+  var masterId          = opt[String](default = "master", name="master-id")
 
   def run(): Unit = {
-    val system = buildClusterSystem(dynamoEndpoint, hostAddress, seedNodes, seedNodes.size)
+    val system = buildClusterSystem(hostAddress, seedNodes, seedNodes.size)
     clusterSingletonActorRef(taskTimeout.seconds, system, masterId)()
     system.whenTerminated.onComplete(_ => System.exit(0))(ExecutionContext.Implicits.global)
     sys.addShutdownHook(Await.result(system.terminate(), 10.seconds))

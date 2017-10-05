@@ -1,0 +1,37 @@
+version: '2'
+services:
+
+    persitence:
+        image: dwmkerr/dynamodb
+        ports:
+            - 8000:8000
+        command: -sharedDb
+
+    persitence-init:
+        image: garland/aws-cli-docker
+        environment:
+            - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+            - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+            - AWS_DEFAULT_REGION=eu-west-1
+        depends_on:
+            - persitence
+        command: aws
+                  --endpoint-url=http://persitence:8000 dynamodb create-table
+                  --table-name akka-persistence
+                  --attribute-definitions
+                      AttributeName=par,AttributeType=S
+                      AttributeName=num,AttributeType=N
+                  --key-schema AttributeName=par,KeyType=HASH AttributeName=num,KeyType=RANGE
+                  --provisioned-throughput ReadCapacityUnits=1000,WriteCapacityUnits=1000
+
+    master-a:
+        environment:
+          - JAVA_TOOL_OPTIONS=-Dconfig.resource=dynamo.conf
+          - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+          - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+    master-b:
+        environment:
+          - JAVA_TOOL_OPTIONS=-Dconfig.resource=dynamo.conf
+          - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+          - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+

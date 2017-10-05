@@ -14,7 +14,8 @@ out/
 ### SBT ###
 
 target/
-target-dry-run/
+target-client/
+target-worker/
 lib_managed/
 src_managed/
 project/boot/

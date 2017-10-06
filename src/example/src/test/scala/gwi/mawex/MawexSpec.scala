@@ -240,7 +240,7 @@ object AbstractMawexSpec {
       remote.netty.tcp.port = 0
     }
     """.stripMargin
-  ).withFallback(ConfigFactory.load("serialization"))
+  ).withFallback(ConfigFactory.parseResources("serialization.conf"))
     .withFallback(ConfigFactory.load())
 
   import scala.language.implicitConversions

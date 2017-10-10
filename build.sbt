@@ -1,3 +1,4 @@
+import sbt.Keys.name
 
 lazy val mawexVersion     = "0.1.8"
 
@@ -33,30 +34,25 @@ lazy val `mawex-core` = (project in file("src/core"))
 
 /** EXAMPLES */
 
+def virtualCommonSettings(name: String, targetDir: String) = Seq(
+    test in Test := {},
+    publish := {},
+    target := baseDirectory.value / targetDir
+  ) ++ assemblySettings(name, Some("gwi.mawex.Launcher")) ++ deploySettings("openjdk:8", "gwiq", name, "gwi.mawex.Launcher")
+
 /** Virtual project that exists merely for building a client docker image */
 lazy val `mawex-example-worker` = (project in file("src/example"))
   .enablePlugins(CommonPlugin, DockerPlugin)
-  .settings(name := "mawex-example-worker")
-  .settings(test in Test := {})
-  .settings(target := baseDirectory.value / "target-worker")
-  .settings(assemblySettings("mawex-example-worker", Some("gwi.mawex.Launcher")))
-  .settings(deploySettings("openjdk:8", "gwiq", "mawex-example-worker", "gwi.mawex.Launcher"))
+  .settings(virtualCommonSettings("mawex-example-worker", "target-worker"))
   .dependsOn(`mawex-core` % "compile->compile;test->test")
 
 /** Virtual project that exists merely for building a client docker image */
 lazy val `mawex-example-client` = (project in file("src/example"))
   .enablePlugins(CommonPlugin, DockerPlugin)
-  .settings(name := "mawex-example-client")
-  .settings(test in Test := {})
-  .settings(target := baseDirectory.value / "target-client")
-  .settings(assemblySettings("mawex-example-worker", Some("gwi.mawex.Launcher")))
-  .settings(deploySettings("openjdk:8", "gwiq", "mawex-example-client", "gwi.mawex.Client"))
+  .settings(virtualCommonSettings("mawex-example-client", "target-client"))
   .dependsOn(`mawex-core` % "compile->compile;test->test")
 
 lazy val `mawex-example-master` = (project in file("src/example"))
   .enablePlugins(CommonPlugin, DockerPlugin)
-  .settings(name := "mawex-example-master")
-  .settings(test in Test := {})
-  .settings(assemblySettings("mawex-example-master", Some("gwi.mawex.Launcher")))
-  .settings(deploySettings("openjdk:8", "gwiq", "mawex-example-master", "gwi.mawex.Launcher"))
+  .settings(virtualCommonSettings("mawex-example-master", "target"))
   .dependsOn(`mawex-core` % "compile->compile;test->test")

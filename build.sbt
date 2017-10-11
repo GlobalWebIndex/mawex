@@ -1,10 +1,5 @@
-import sbt.Keys.name
 
-lazy val mawexVersion     = "0.1.8"
-
-lazy val githubOrgUrl     = "https://github.com/GlobalWebIndex"
-
-version in ThisBuild := mawexVersion
+version in ThisBuild := "0.1.8"
 crossScalaVersions in ThisBuild := Seq("2.12.3", "2.11.8")
 organization in ThisBuild := "net.globalwebindex"
 
@@ -15,7 +10,6 @@ lazy val mawex = (project in file("."))
 
 lazy val `mawex-api` = (project in file("src/api"))
   .enablePlugins(CommonPlugin)
-  .settings(name := "mawex-api")
   .settings(publishSettings("globalWebIndex", "mawex-api", s3Resolver))
   .settings(libraryDependencies ++= Seq(
       akkaCluster, akkaClusterTools, akkaActor, akkaPersistence, akkaKryoSerialization, akkaClusterCustomDowning
@@ -24,7 +18,6 @@ lazy val `mawex-api` = (project in file("src/api"))
 
 lazy val `mawex-core` = (project in file("src/core"))
   .enablePlugins(CommonPlugin, DockerPlugin)
-  .settings(name := "mawex-core")
   .settings(fork in Test := true)
   .settings(libraryDependencies ++= Seq(akkaPersistenceInMemory % "test", akkaTestkit, scalatest))
   .settings(publishSettings("globalWebIndex", "mawex-core", s3Resolver))

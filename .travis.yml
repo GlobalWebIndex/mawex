@@ -23,4 +23,4 @@ notifications:
 before_script:
   - rm -rf ${HOME}/.sbt/0.13/staging
 script:
-  - sbt ++$TRAVIS_SCALA_VERSION clean mawex-example-worker/test
+  - sbt ++$TRAVIS_SCALA_VERSION clean mawex-core/test

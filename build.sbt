@@ -1,51 +1,34 @@
 
-version in ThisBuild := "0.1.8"
+version in ThisBuild := "0.1.9"
 crossScalaVersions in ThisBuild := Seq("2.12.3", "2.11.8")
 organization in ThisBuild := "net.globalwebindex"
+libraryDependencies in ThisBuild ++= clist ++ loggingApi
 
 lazy val mawex = (project in file("."))
   .settings(aggregate in update := false)
   .settings(publish := { })
-  .aggregate(`mawex-api`, `mawex-core`, `mawex-example-worker`, `mawex-example-client`, `mawex-example-master`)
+  .aggregate(`mawex-api`, `mawex-core`, `mawex-example`)
 
 lazy val `mawex-api` = (project in file("src/api"))
   .enablePlugins(CommonPlugin)
   .settings(publishSettings("globalWebIndex", "mawex-api", s3Resolver))
-  .settings(libraryDependencies ++= Seq(
-      akkaCluster, akkaClusterTools, akkaActor, akkaPersistence, akkaKryoSerialization, akkaClusterCustomDowning
-    ) ++ clist
-  )
+  .settings(libraryDependencies ++= Seq(akkaCluster, akkaClusterTools, akkaActor, akkaPersistence, akkaKryoSerialization, akkaClusterCustomDowning))
 
 lazy val `mawex-core` = (project in file("src/core"))
   .enablePlugins(CommonPlugin, DockerPlugin)
   .settings(fork in Test := true)
   .settings(libraryDependencies ++= Seq(akkaPersistenceInMemory % "test", akkaTestkit, scalatest))
   .settings(publishSettings("globalWebIndex", "mawex-core", s3Resolver))
-  .settings(assemblySettings("mawex", Some("gwi.mawex.Launcher")))
-  .settings(deploySettings("openjdk:8", "gwiq", "mawex", "gwi.mawex.Launcher"))
+  .settings(deploy("openjdk:8", "gwiq", "mawex", "gwi.mawex.Launcher"))
   .dependsOn(`mawex-api` % "compile->compile;test->test")
 
-/** EXAMPLES */
-
-def virtualCommonSettings(name: String, targetDir: String) = Seq(
-    test in Test := {},
-    publish := {},
-    target := baseDirectory.value / targetDir
-  ) ++ assemblySettings(name, Some("gwi.mawex.Launcher")) ++ deploySettings("openjdk:8", "gwiq", name, "gwi.mawex.Launcher")
-
-/** Virtual project that exists merely for building a client docker image */
-lazy val `mawex-example-worker` = (project in file("src/example"))
+lazy val `mawex-example` = (project in file("src/example"))
   .enablePlugins(CommonPlugin, DockerPlugin)
-  .settings(virtualCommonSettings("mawex-example-worker", "target-worker"))
-  .dependsOn(`mawex-core` % "compile->compile;test->test")
-
-/** Virtual project that exists merely for building a client docker image */
-lazy val `mawex-example-client` = (project in file("src/example"))
-  .enablePlugins(CommonPlugin, DockerPlugin)
-  .settings(virtualCommonSettings("mawex-example-client", "target-client"))
-  .dependsOn(`mawex-core` % "compile->compile;test->test")
-
-lazy val `mawex-example-master` = (project in file("src/example"))
-  .enablePlugins(CommonPlugin, DockerPlugin)
-  .settings(virtualCommonSettings("mawex-example-master", "target"))
-  .dependsOn(`mawex-core` % "compile->compile;test->test")
+  .settings(publish := {})
+  .settings(
+    deployMultiple(
+      DeployDef(config("master") extend Compile, "openjdk:8", "gwiq", "mawex-example-master", "gwi.mawex.Launcher"),
+      DeployDef(config("worker") extend Compile, "openjdk:8", "gwiq", "mawex-example-worker", "gwi.mawex.Launcher"),
+      DeployDef(config("client") extend Compile, "openjdk:8", "gwiq", "mawex-example-client", "gwi.mawex.Launcher")
+    )
+  ).dependsOn(`mawex-core` % "compile->compile;test->test")

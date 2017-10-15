@@ -1,5 +1,5 @@
 
-version in ThisBuild := "0.1.9"
+version in ThisBuild := "0.2.0"
 crossScalaVersions in ThisBuild := Seq("2.12.3", "2.11.8")
 organization in ThisBuild := "net.globalwebindex"
 libraryDependencies in ThisBuild ++= clist ++ loggingApi
@@ -19,7 +19,7 @@ lazy val `mawex-core` = (project in file("src/core"))
   .settings(fork in Test := true)
   .settings(libraryDependencies ++= Seq(akkaPersistenceInMemory % "test", akkaTestkit, scalatest))
   .settings(publishSettings("globalWebIndex", "mawex-core", s3Resolver))
-  .settings(deploy("openjdk:8", "gwiq", "mawex", "gwi.mawex.Launcher"))
+  .settings(deploy("openjdk:8", "gwiq", "mawex", "gwi.mawex.Launcher", Seq.empty, Some(config("app") extend Compile)))
   .dependsOn(`mawex-api` % "compile->compile;test->test")
 
 lazy val `mawex-example` = (project in file("src/example"))
@@ -27,8 +27,7 @@ lazy val `mawex-example` = (project in file("src/example"))
   .settings(publish := {})
   .settings(
     deployMultiple(
-      DeployDef(config("master") extend Compile, "openjdk:8", "gwiq", "mawex-example-master", "gwi.mawex.Launcher"),
-      DeployDef(config("worker") extend Compile, "openjdk:8", "gwiq", "mawex-example-worker", "gwi.mawex.Launcher"),
-      DeployDef(config("client") extend Compile, "openjdk:8", "gwiq", "mawex-example-client", "gwi.mawex.Launcher")
+      DeployDef(config("server") extend Compile, "openjdk:8", "gwiq", "mawex-example-server", "gwi.mawex.Launcher"),
+      DeployDef(config("client") extend Compile, "openjdk:8", "gwiq", "mawex-example-client", "gwi.mawex.Client")
     )
   ).dependsOn(`mawex-core` % "compile->compile;test->test")

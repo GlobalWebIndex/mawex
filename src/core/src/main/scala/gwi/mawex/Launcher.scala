@@ -92,14 +92,14 @@ object ClusterService {
         .withFallback(ConfigFactory.load())
     )
 
-  def clusterSingletonActorRef(taskTimeout: FiniteDuration, system: ActorSystem, name: String)(arf: ActorRefFactory = system): ActorRef = {
-    arf.actorOf(
+  def clusterSingletonActorRef(masterConf: Master.Config, system: ActorSystem): ActorRef = {
+    system.actorOf(
       ClusterSingletonManager.props(
-        Master.props(name, taskTimeout),
+        Master.props(masterConf),
         PoisonPill,
         ClusterSingletonManagerSettings(system).withRole("backend")
       ),
-      name
+      masterConf.masterId
     )
   }
 
@@ -132,12 +132,13 @@ object SandBoxCmd extends Command(name = "sandbox", description = "executes arbi
 object MasterCmd extends Command(name = "master", description = "launches master") with ClusterService {
   import ClusterService._
 
-  var taskTimeout       = opt[Int](default = 60*60, description = "timeout for a task in seconds")
-  var masterId          = opt[String](default = "master", name="master-id")
+  var progressingTaskTimeout  = opt[Int](default = 60*60, description = "timeout for a task progression in seconds")
+  var pendingTaskTimeout      = opt[Int](default = 3*24, description = "timeout for a pending task in hours")
+  var masterId                = opt[String](default = "master", name="master-id")
 
   def run(): Unit = {
     val system = buildClusterSystem(hostAddress, seedNodes, seedNodes.size)
-    clusterSingletonActorRef(taskTimeout.seconds, system, masterId)()
+    clusterSingletonActorRef(Master.Config(masterId, progressingTaskTimeout.seconds, pendingTaskTimeout.hours), system)
     system.whenTerminated.onComplete(_ => System.exit(0))(ExecutionContext.Implicits.global)
     sys.addShutdownHook(Await.result(system.terminate(), 10.seconds))
   }

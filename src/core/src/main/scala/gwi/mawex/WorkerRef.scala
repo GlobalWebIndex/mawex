@@ -5,7 +5,6 @@ import akka.actor.{ActorContext, ActorRef}
 import akka.event.LoggingAdapter
 
 import collection.{breakOut, mutable}
-import scala.concurrent.duration.FiniteDuration
 
 protected[mawex] sealed trait WorkerStatus
 protected[mawex] case object Idle extends WorkerStatus
@@ -52,14 +51,14 @@ protected[mawex] object WorkerRef {
           task.id -> task
         }(breakOut)
 
-    def validate(workState: State, workerCheckinInterval: FiniteDuration, taskTimeout: FiniteDuration)(implicit log: LoggingAdapter): Unit = {
-      for ((workerId, WorkerRef(_, _, registrationTime, _)) <- underlying if (System.currentTimeMillis() - registrationTime) > workerCheckinInterval.toMillis * 6) {
+    def validate(workState: State, conf: Master.Config)(implicit log: LoggingAdapter): Unit = {
+      for ((workerId, WorkerRef(_, _, registrationTime, _)) <- underlying if (System.currentTimeMillis() - registrationTime) > conf.workerCheckinInterval.toMillis * 6) {
         log.warning(s"worker $workerId has not checked in, context.watch doesn't work !!!")
       }
-      for ((taskId, creationTime) <- workState.getProgressingTaskIds if (System.currentTimeMillis() - creationTime) > taskTimeout.toMillis) {
+      for ((taskId, creationTime) <- workState.getProgressingTaskIds if (System.currentTimeMillis() - creationTime) > conf.progressingTaskTimeout.toMillis) {
         log.warning("Progressing task {} timed out, worker has not replied !!!", taskId)
       }
-      for ((taskId, creationTime) <- workState.getPendingTaskIds if (System.currentTimeMillis() - creationTime) > taskTimeout.toMillis) {
+      for ((taskId, creationTime) <- workState.getPendingTaskIds if (System.currentTimeMillis() - creationTime) > conf.pendingTaskTimeout.toMillis) {
         log.warning("Pending task {} timed out, no worker asked for it !!!", taskId)
       }
     }

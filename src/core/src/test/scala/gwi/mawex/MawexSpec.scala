@@ -46,7 +46,7 @@ abstract class AbstractMawexSpec(_system: ActorSystem) extends TestKit(_system) 
   override def beforeAll(): Unit = try super.beforeAll() finally {
     system.eventStream.subscribe(system.actorOf(Props(new UnhandledMessageListener())), classOf[UnhandledMessage])
     system.eventStream.subscribe(workerSystem.actorOf(Props(new UnhandledMessageListener())), classOf[UnhandledMessage])
-    ClusterService.clusterSingletonActorRef(singleMsgTimeout * 14, system, MasterId)()
+    ClusterService.clusterSingletonActorRef(Master.Config(MasterId, singleMsgTimeout * 14, 1.minute), system)
   }
 
   override def afterAll(): Unit = {

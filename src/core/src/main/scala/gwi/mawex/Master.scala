@@ -12,7 +12,7 @@ import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.collection.breakOut
 
-class Master(masterId: String, taskTimeout: FiniteDuration, workerCheckinInterval: FiniteDuration) extends PersistentActor with ActorLogging {
+class Master(conf: Master.Config) extends PersistentActor with ActorLogging {
   import Master._
   import WorkerRef._
   import context.dispatcher
@@ -52,14 +52,14 @@ class Master(masterId: String, taskTimeout: FiniteDuration, workerCheckinInterva
 
   private[this] def handleHeartBeat(heartBeat: HeartBeat) = heartBeat match {
     case Validate =>
-      workersById.validate(workState, workerCheckinInterval, taskTimeout)
+      workersById.validate(workState, conf)
 
     case Cleanup =>
       val tasksById = workersById.findProgressingOrphanTask(workState)
       persistAll(tasksById.keys.map(TaskFailed)(breakOut)) { failedEvent =>
         log.warning("Orphan processing task, his worker probably died in battle : {} !!!", failedEvent)
         workState = workState.updated(failedEvent)
-        mediator ! DistributedPubSubMediator.Publish(masterId, TaskResult(tasksById(failedEvent.taskId), Left(s"Orphan progressing task ${failedEvent.taskId} !!!")))
+        mediator ! DistributedPubSubMediator.Publish(conf.masterId, TaskResult(tasksById(failedEvent.taskId), Left(s"Orphan progressing task ${failedEvent.taskId} !!!")))
       }
   }
 
@@ -75,7 +75,7 @@ class Master(masterId: String, taskTimeout: FiniteDuration, workerCheckinInterva
           persist(TaskFailed(task.id)) { e =>
             workState = workState.updated(e)
             notifyWorkers()
-            mediator ! DistributedPubSubMediator.Publish(masterId, TaskResult(task, Left(s"Worker $workerId checked out while processing task ${task.id} ...")))
+            mediator ! DistributedPubSubMediator.Publish(conf.masterId, TaskResult(task, Left(s"Worker $workerId checked out while processing task ${task.id} ...")))
           }
         }
 
@@ -112,7 +112,7 @@ class Master(masterId: String, taskTimeout: FiniteDuration, workerCheckinInterva
           workState = workState.updated(e)
           workersById.idle(workerId, taskId)
           notifyWorkers()
-          mediator ! DistributedPubSubMediator.Publish(masterId, TaskResult(task, resultEither))
+          mediator ! DistributedPubSubMediator.Publish(conf.masterId, TaskResult(task, resultEither))
           s ! m2w.TaskResultAck(taskId)
         }
       }
@@ -159,10 +159,12 @@ object Master {
     System.currentTimeMillis()
   }
 
+  case class Config(masterId: String, progressingTaskTimeout: FiniteDuration, pendingTaskTimeout: FiniteDuration, workerCheckinInterval: FiniteDuration = 5.seconds)
+
   protected[mawex] sealed trait HeartBeat
   protected[mawex] case object Validate extends HeartBeat
   protected[mawex] case object Cleanup extends HeartBeat
 
-  def props(resultTopicName: String, taskTimeout: FiniteDuration, workerCheckinInterval: FiniteDuration = 5.seconds): Props = Props(classOf[Master], resultTopicName, taskTimeout, workerCheckinInterval)
+  def props(config: Config): Props = Props(classOf[Master], config)
 
 }

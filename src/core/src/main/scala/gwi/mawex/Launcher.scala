@@ -174,12 +174,12 @@ object WorkerCmd extends Command(name = "workers", description = "launches worke
   }
 
   def run(): Unit = {
-    val system = RemoteService.buildRemoteSystem(Address("akka.tcp", Worker.SystemName, Some(hostAddress.host), Some(hostAddress.port)))
-    val clusterClient = workerClusterClient(seedNodes, system)
     val commandArgSeq = commandBuilderArgs.map(_.split(" ").filter(_.nonEmpty).toSeq).getOrElse(Seq.empty)
     val commandOpt = commandBuilderClass.map( className => buildCommand(Class.forName(className), commandArgSeq) )
     val executorClazz = Class.forName(executorClass)
     val executorProps = commandOpt.fold(Props(executorClazz))(cmd => Props(executorClazz, cmd))
+    val system = RemoteService.buildRemoteSystem(Address("akka.tcp", Worker.SystemName, Some(hostAddress.host), Some(hostAddress.port)))
+    val clusterClient = workerClusterClient(seedNodes, system)
     consumerGroups.foreach { consumerGroup =>
       workerActorRef(
         masterId,

@@ -1,5 +1,5 @@
 
-version in ThisBuild := "0.2.7"
+version in ThisBuild := "0.2.8"
 crossScalaVersions in ThisBuild := Seq("2.12.4", "2.11.8")
 organization in ThisBuild := "net.globalwebindex"
 libraryDependencies in ThisBuild ++= clist ++ loggingApi
@@ -12,12 +12,12 @@ lazy val mawex = (project in file("."))
 lazy val `Mawex-api` = (project in file("src/api"))
   .enablePlugins(CommonPlugin)
   .settings(publishSettings("globalWebIndex", "mawex-api", s3Resolver))
-  .settings(libraryDependencies ++= Seq(akkaCluster, akkaClusterTools, akkaActor, akkaPersistence, akkaKryoSerialization, akkaClusterCustomDowning))
+  .settings(libraryDependencies ++= Seq(akkaActor, akkaClusterTools))
 
 lazy val `Mawex-core` = (project in file("src/core"))
   .enablePlugins(CommonPlugin, DockerPlugin)
   .settings(fork in Test := true)
-  .settings(libraryDependencies ++= Seq(akkaPersistenceInMemory % "test", akkaTestkit, scalatest))
+  .settings(libraryDependencies ++= Seq(akkaCluster, akkaPersistence, akkaKryoSerialization, akkaClusterCustomDowning, akkaPersistenceInMemory % "test", akkaTestkit, scalatest))
   .settings(publishSettings("globalWebIndex", "mawex-core", s3Resolver))
   .settings(deploy(DeployDef(config("app") extend Compile, "openjdk:9", "gwiq", "mawex", "gwi.mawex.Launcher")))
   .dependsOn(`Mawex-api` % "compile->compile;test->test")

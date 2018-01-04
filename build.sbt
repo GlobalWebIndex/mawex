@@ -1,8 +1,10 @@
 
-version in ThisBuild := "0.2.8"
+version in ThisBuild := "0.2.9"
 crossScalaVersions in ThisBuild := Seq("2.12.4", "2.11.8")
 organization in ThisBuild := "net.globalwebindex"
 libraryDependencies in ThisBuild ++= clist ++ loggingApi
+
+lazy val tempKryoDep = "net.globalwebindex" %% "akka-kryo-serialization" % "0.5.3-SNAPSHOT" // adhoc published before PR is merged https://github.com/romix/akka-kryo-serialization/pull/124
 
 lazy val mawex = (project in file("."))
   .settings(aggregate in update := false)
@@ -17,7 +19,7 @@ lazy val `Mawex-api` = (project in file("src/api"))
 lazy val `Mawex-core` = (project in file("src/core"))
   .enablePlugins(CommonPlugin, DockerPlugin)
   .settings(fork in Test := true)
-  .settings(libraryDependencies ++= Seq(akkaCluster, akkaPersistence, akkaKryoSerialization, akkaClusterCustomDowning, akkaPersistenceInMemory % "test", akkaTestkit, scalatest))
+  .settings(libraryDependencies ++= Seq(akkaCluster, akkaPersistence, tempKryoDep, akkaClusterCustomDowning, akkaPersistenceInMemory % "test", akkaTestkit, scalatest))
   .settings(publishSettings("globalWebIndex", "mawex-core", s3Resolver))
   .settings(deploy(DeployDef(config("app") extend Compile, "openjdk:9", "gwiq", "mawex", "gwi.mawex.Launcher")))
   .dependsOn(`Mawex-api` % "compile->compile;test->test")

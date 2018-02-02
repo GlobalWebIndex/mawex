@@ -101,6 +101,12 @@ amount and throughput of tasks that are being submitted to it in which case some
 It uses Kryo serialization because event log is persisted only temporarily and it would be deleted on new deploy.
 By default it uses the Oldest node auto-downing strategy for split-brain cases because the cluster is solely about Singleton with actor residing on the oldest node.
 
+### Production cluster behavior
+
+When you deploy a cluster of Master and Worker nodes, you are free to stop/start Workers freely, they just register and unregister from Master
+and tasks would be pending until corresponding Worker shows up. This is good for deployment purposes because Workers are being developed continually
+and you can ship them without restarting whole cluster, even if you don't have redundant workers, task would wait in Master until corresponding Worker asks for it.
+
 ```
 $ cd docker
 $ docker-compose -f ${plugin}.yml -f mawex.yml up

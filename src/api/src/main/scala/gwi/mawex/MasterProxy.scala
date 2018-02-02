@@ -9,6 +9,9 @@ import akka.util.Timeout
 
 import scala.concurrent.duration._
 
+/**
+  * Use this proxy for communication with Master actor if you created it in your local JVM actor system
+  */
 class LocalMasterProxy(masterId: String) extends Actor {
   import context.dispatcher
   private[this] val masterProxy =
@@ -37,6 +40,9 @@ object LocalMasterProxy {
   def props(masterId: String): Props = Props(classOf[LocalMasterProxy], masterId)
 }
 
+/**
+  * Use this proxy for communication with Master actor if it resides in a remote actor system
+  */
 class RemoteMasterProxy(masterId: String, initialContacts: Set[ActorPath]) extends Actor with ActorLogging {
   import RemoteMasterProxy._
   import context.dispatcher

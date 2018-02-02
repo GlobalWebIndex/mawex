@@ -21,6 +21,7 @@ object State {
 
 }
 
+/** Persistent Actor Event Sourced State tracking progress of mawex */
 case class State private(private val pendingTasks: Map[Task, Long], private val progressingTasks: Map[Task, Long], private val doneTaskIds: Vector[TaskId]) {
   import State._
 

@@ -14,13 +14,14 @@ import scala.concurrent.{Await, ExecutionContext}
 import scala.sys.process.Process
 import scala.util.Try
 
-/** Executor itself is delivered by users, Mawex provides only SandBox where Executor runs */
+/** Executor itself is delivered by users, Mawex provides only SandBox where Executor runs, see [[gwi.mawex.WorkerCmd]] */
 object Executor {
   val ActorName   = "Executor"
   val SystemName  = "ExecutorSystem"
 }
 
-/** Mawex SandBoxes are resilient, let's escalate errors from underlying executors to Worker that is responsible for Executor failures */
+/** Mawex SandBoxes are like a runtime environment for executors
+  * They are resilient, let's escalate errors from underlying executors to Worker that is responsible for Executor failures */
 sealed trait SandBox extends Actor with ActorLogging {
   override def supervisorStrategy = OneForOneStrategy() {
     case _: ActorInitializationException ⇒ Stop
@@ -36,6 +37,7 @@ object SandBox {
   def forkProps(executorProps: Props, forkedJvm: ForkedJvm): Props = Props(classOf[ForkingSandBox], executorProps, forkedJvm)
 }
 
+/** SandBox for local JVM execution */
 class DefaultSandBox(executorProps: Props) extends SandBox {
   override def receive: Receive = {
     case Task(_, job) =>
@@ -44,6 +46,10 @@ class DefaultSandBox(executorProps: Props) extends SandBox {
     }
 }
 
+/**
+  * SandBox for execution in a forked JVM, actor system is started in forked jvm so that complex results can be
+  * returned through akka remoting. Otherwise results would have to be collected from stdout.
+  */
 class ForkingSandBox(executorProps: Props, forkedJvm: ForkedJvm) extends SandBox {
 
   private[this] var process: Option[Process] = Option.empty

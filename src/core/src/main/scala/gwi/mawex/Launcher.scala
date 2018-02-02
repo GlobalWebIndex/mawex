@@ -118,7 +118,7 @@ trait ClusterService extends RemoteService { this: Command =>
   var seedNodes = opt[List[HostAddress]](default = List(HostAddress("master", 2552)), description = "12.34.56.78:2551,12.34.56.79:2552")
 }
 
-object SandBoxCmd extends Command(name = "sandbox", description = "executes arbitrary class") with MawexService {
+object SandBoxCmd extends Command(name = "sandbox", description = "executes arbitrary app in forked jvm") with MawexService {
 
   var timeout       = opt[Int](default = 1800, description = "How many seconds the app can run before it times out")
   var jvmOpts       = opt[Option[String]]()
@@ -134,7 +134,7 @@ object MasterCmd extends Command(name = "master", description = "launches master
 
   var progressingTaskTimeout  = opt[Int](default = 60*60, description = "timeout for a task progression in seconds")
   var pendingTaskTimeout      = opt[Int](default = 3*24, description = "timeout for a pending task in hours")
-  var masterId                = opt[String](default = "master", name="master-id")
+  var masterId                = opt[String](default = "master", name="master-id", description = "Unique identifier of this master node")
 
   def run(): Unit = {
     val system = buildClusterSystem(hostAddress, seedNodes, seedNodes.size)

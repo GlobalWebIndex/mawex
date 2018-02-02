@@ -29,9 +29,18 @@ object p2c {
   case class Rejected(taskId: TaskId) extends TaskSubmission
 }
 
+/**
+  * Its purpose is to collect user arguments and build a serializable MawexCommand
+  * It exists merely because of the fact that MawexCommand must be serializable case class
+  */
 abstract class MawexCommandBuilder[C <: MawexCommand] extends Command(name = "command") {
   def build: C
 }
 
-/** Must be serializable */
-trait MawexCommand
+/**
+  * MawexCommand is a marker trait for commands passed to executor for execution.
+  * Executor class is provided by user, see [[gwi.mawex.WorkerCmd]]
+  * @note MawexCommand implementations must be case classes that do not hold any state as Command is serialized
+  *       because it is passed to a remote actor (instantiated in a forked jvm process) as an argument
+  */
+trait MawexCommand extends Serializable

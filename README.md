@@ -80,6 +80,9 @@ System is designed for :
  2. both horizontal and vertical scalability so that one can :
     - add more workers on the fly if tasks start coming more frequently
     - switch to bigger pods if workers need more resources, memory especially
+    - pod is an isolated execution environment for Workers, if you have one mission critical worker and 6 expendable workers,
+      you would create a dedicated pod for the mission critical worker and a second pod for those 6 workers,
+      this way the mission critical worker is not affected by runtime of the others
  2. resiliency :
     - tasks are executed by Executor in forked JVM process, so called sandbox, which minimizes possibility of system failures
 

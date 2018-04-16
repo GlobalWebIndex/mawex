@@ -29,7 +29,7 @@ sealed trait RemoteService extends MawexService { this: Command =>
     HostAddress(host,port.toInt)
   }
 
-  var hostAddress = arg[HostAddress](name="host-address", description = "host:port of this node")
+  var hostAddress = opt[HostAddress](useEnv = true, default = HostAddress("localhost", 2551), description = "host:port of this node")
 }
 
 object RemoteService {
@@ -115,7 +115,7 @@ trait ClusterService extends RemoteService { this: Command =>
     str.split(",").map (_.split(":")).map( arr => HostAddress(arr(0), arr(1).toInt) ).toList
   }
 
-  var seedNodes = opt[List[HostAddress]](default = List(HostAddress("master", 2552)), description = "12.34.56.78:2551,12.34.56.79:2552")
+  var seedNodes = opt[List[HostAddress]](useEnv = true, default = List(HostAddress("master", 2552)), description = "12.34.56.78:2551,12.34.56.79:2552")
 }
 
 object SandBoxCmd extends Command(name = "sandbox", description = "executes arbitrary app in forked jvm") with MawexService {
@@ -132,9 +132,9 @@ object SandBoxCmd extends Command(name = "sandbox", description = "executes arbi
 object MasterCmd extends Command(name = "master", description = "launches master") with ClusterService {
   import ClusterService._
 
-  var progressingTaskTimeout  = opt[Int](default = 60*60, description = "timeout for a task progression in seconds")
-  var pendingTaskTimeout      = opt[Int](default = 3*24, description = "timeout for a pending task in hours")
-  var masterId                = opt[String](default = "master", name="master-id", description = "Unique identifier of this master node")
+  var progressingTaskTimeout  = opt[Int](useEnv = true, default = 60*60, description = "timeout for a task progression in seconds")
+  var pendingTaskTimeout      = opt[Int](useEnv = true, default = 3*24, description = "timeout for a pending task in hours")
+  var masterId                = opt[String](useEnv = true, default = "master", name="master-id", description = "Unique identifier of this master node")
 
   def run(): Unit = {
     val system = buildClusterSystem(hostAddress, seedNodes, seedNodes.size)
@@ -146,11 +146,11 @@ object MasterCmd extends Command(name = "master", description = "launches master
 
 object WorkerCmd extends Command(name = "workers", description = "launches workers") with ClusterService {
 
-  var consumerGroups      = opt[List[String]](default = List("default"), description = "sum,add,divide - 3 workers in 3 consumer groups")
-  var pod                 = opt[String](default = "default", description = "Workers within the same pod are executing sequentially")
-  var masterId            = opt[String](default = "master", name="master-id")
-  var taskTimeout         = opt[Int](default = 60*60, description = "timeout for a task in seconds")
-  var sandboxJvmOpts      = opt[Option[String]](name = "sandbox-jvm-opts", description = "Whether to execute task in a forked process and with what JVM options")
+  var consumerGroups      = opt[List[String]](useEnv = true, default = List("default"), description = "sum,add,divide - 3 workers in 3 consumer groups")
+  var pod                 = opt[String](useEnv = true, default = "default", description = "Workers within the same pod are executing sequentially")
+  var masterId            = opt[String](useEnv = true, default = "master", name="master-id")
+  var taskTimeout         = opt[Int](useEnv = true, default = 60*60, description = "timeout for a task in seconds")
+  var sandboxJvmOpts      = opt[Option[String]](useEnv = true, name = "sandbox-jvm-opts", description = "Whether to execute task in a forked process and with what JVM options")
   var executorClass       = arg[String](name="executor-class", description = "Full class name of executor Actor")
   var commandBuilderClass = arg[Option[String]](required = false, name="command-builder-class", description = "Full class name of MawexCommandBuilder")
   var commandBuilderArgs  = arg[Option[String]](required = false, name="command-args", description = "Arguments to be passed to MawexCommandBuilder")

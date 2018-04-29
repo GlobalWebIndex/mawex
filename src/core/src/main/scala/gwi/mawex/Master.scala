@@ -1,6 +1,6 @@
 package gwi.mawex
 
-import akka.actor.{ActorLogging, Props, Terminated}
+import akka.actor.{ActorLogging, ActorRef, Props, Terminated}
 import akka.cluster.Cluster
 import akka.cluster.client.ClusterClientReceptionist
 import akka.cluster.pubsub.{DistributedPubSub, DistributedPubSubMediator}
@@ -97,26 +97,32 @@ class Master(conf: Master.Config) extends PersistentActor with ActorLogging {
       }
 
     case w2m.TaskFinished(workerId, taskId, resultEither) =>
-      val s = sender()
-      workState.getTaskInProgress(taskId).foreach { task =>
-        val event =
-          resultEither match {
-            case Right(result) =>
-              log.info("Task {} is done by worker {}", taskId, workerId)
-              TaskCompleted(taskId, result)
-            case Left(error) =>
-              log.error("Task {} crashed in worker {} due to : {}", taskId, workerId, error)
-              TaskFailed(taskId)
-          }
-        persist(event) { e =>
-          workState = workState.updated(e)
-          workersById.idle(workerId, taskId)
-          notifyWorkers()
-          mediator ! DistributedPubSubMediator.Publish(conf.masterId, TaskResult(task, resultEither))
-          s ! m2w.TaskResultAck(taskId)
-        }
+      workState.getTaskInProgress(taskId) match {
+        case Some(task) => handleTaskInProgress(workerId, task, resultEither, sender())
+        case None =>
+          log.info("Task {} finished by worker {} isn't in progress", taskId.id, workerId)
+          sender() ! m2w.TaskResultAck(taskId)
       }
     }
+
+  private def handleTaskInProgress(workerId: WorkerId, task: Task, resultEither: Either[String, Any], s: ActorRef) {
+    val event =
+      resultEither match {
+        case Right(result) =>
+          log.info("Task {} is done by worker {}", task.id, workerId)
+          TaskCompleted(task.id, result)
+        case Left(error) =>
+          log.error("Task {} crashed in worker {} due to : {}", task.id, workerId, error)
+          TaskFailed(task.id)
+      }
+    persist(event) { e =>
+      workState = workState.updated(e)
+      workersById.idle(workerId, task.id)
+      notifyWorkers()
+      mediator ! DistributedPubSubMediator.Publish(conf.masterId, TaskResult(task, resultEither))
+      s ! m2w.TaskResultAck(task.id)
+    }
+  }
 
   override def receiveCommand: Receive = {
     case heartBeat: HeartBeat =>

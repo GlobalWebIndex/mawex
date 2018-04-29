@@ -226,6 +226,12 @@ abstract class AbstractMawexSpec(_system: ActorSystem) extends TestKit(_system) 
       }
     }
 
+    "handle TaskFinished message idempotently" in {
+      val workerId = WorkerId(ConsumerGroup, "1", "1")
+      val taskId = TaskId("unknown", ConsumerGroup)
+      masterProxy ! w2m.TaskFinished(workerId, taskId, Right("ok"))
+      expectMsg(m2w.TaskResultAck(taskId))
+    }
   }
 }
 

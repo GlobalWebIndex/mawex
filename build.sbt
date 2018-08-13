@@ -1,5 +1,5 @@
 
-version in ThisBuild := "0.3.9"
+version in ThisBuild := "0.4.0"
 crossScalaVersions in ThisBuild := Seq("2.12.4", "2.11.8")
 organization in ThisBuild := "net.globalwebindex"
 libraryDependencies in ThisBuild ++= clist ++ loggingApi
@@ -27,6 +27,7 @@ lazy val `Mawex-core` = (project in file("src/core"))
 lazy val `Mawex-example` = (project in file("src/example"))
   .enablePlugins(CommonPlugin, DockerPlugin)
   .settings(publish := {})
+  .settings(libraryDependencies ++= Seq(loggingImplLogback))
   .settings(
     deploy(
       DeployDef(config("server") extend Compile, "openjdk:8", "gwiq", "mawex-example-server", "gwi.mawex.Launcher"),

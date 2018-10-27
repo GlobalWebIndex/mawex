@@ -91,7 +91,7 @@ class ForkingSandBox(executorProps: Props, forkedJvm: ForkedJvm) extends SandBox
       executor ! job
       context.become(working(worker, executor))
     case ReceiveTimeout =>
-      log.error("Forked Executor Remote actor system has not registered !!!")
+      log.warning("Forked Executor Remote actor system has not registered !!!")
   }
 
   def working(worker: ActorRef, executor: ActorRef): Receive = {

@@ -97,6 +97,7 @@ class ForkingSandBox(executorProps: Props, forkedJvm: ForkedJvm) extends SandBox
   def working(worker: ActorRef, executor: ActorRef): Receive = {
     case taskExecuted: e2w.TaskExecuted =>
       executor ! PoisonPill
+      log.warning(s"Executor finished task with result : ${taskExecuted.result}")
       worker ! taskExecuted
       terminateProcess()
       context.become(idle)

@@ -90,6 +90,7 @@ class Master(conf: Master.Config) extends PersistentActor with ActorLogging {
               workersById.get(workerId).filter(_.status == Idle).foreach { _ =>
                 log.info("Giving worker {} some task {}", workerId, task.id)
                 workersById.employ(workerId, task.id)
+                mediator ! DistributedPubSubMediator.Publish(conf.masterId, m2p.TaskScheduled(task.id))
                 s ! task
               }
             }

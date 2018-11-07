@@ -12,6 +12,7 @@ import akka.testkit.{ImplicitSender, TestKit, TestProbe}
 import com.typesafe.config.ConfigFactory
 import gwi.mawex.ForkingSandBox.ForkedJvm
 import gwi.mawex.RemoteService.HostAddress
+import gwi.mawex.m2p.TaskScheduled
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.{Millis, Seconds, Span}
 import org.scalatest.{BeforeAndAfterAll, FreeSpecLike, Matchers}
@@ -104,7 +105,8 @@ abstract class AbstractMawexSpec(_system: ActorSystem) extends TestKit(_system) 
     }
   }
 
-  private[this] def receiveResults(n: Int) = probe.receiveN(n, singleMsgTimeout * n).map { case r: TaskResult => r }.partition(_.result.isSuccess)
+  private[this] def receiveResults(n: Int) =
+    probe.receiveN(n, singleMsgTimeout * n).collect { case r: TaskResult => r }.partition(_.result.isSuccess)
 
   private[this] def assertStatus(pending: Set[String], progressing: Set[String], done: Vector[String] => Unit, workerStatus: Map[String, WorkerStatus] => Unit) = {
     masterProxy ! GetMawexState
@@ -123,7 +125,7 @@ abstract class AbstractMawexSpec(_system: ActorSystem) extends TestKit(_system) 
       masterProxy ! Task(taskId, n)
       expectMsg(p2c.Accepted(taskId))
     }
-    val (successes, failures) = receiveResults(14)
+    val (successes, failures) = receiveResults(28)
     assert(failures.isEmpty)
     successes.toVector.map(_.task.id.id.toInt).toSet should be(nextTaskIds.toSet)
     assert(successes.map(_.result.get.asInstanceOf[String]).toSet.size == refSize)
@@ -136,6 +138,7 @@ abstract class AbstractMawexSpec(_system: ActorSystem) extends TestKit(_system) 
         val taskId = TaskId(nextTaskId.toString, ConsumerGroup)
         masterProxy ! Task(taskId, 1)
         expectMsg(singleMsgTimeout, p2c.Accepted(taskId))
+        probe.expectMsgType[m2p.TaskScheduled](singleMsgTimeout).taskId should be(TaskId(nextTaskId.toString, ConsumerGroup))
         probe.expectMsgType[TaskResult](singleMsgTimeout).task.id should be(TaskId(nextTaskId.toString, ConsumerGroup))
         assertStatus(Set.empty, Set.empty, done => assertResult(Vector(nextTaskId.toString))(done), workerStatus => assertResult(Map("1" -> Idle))(workerStatus))
       }
@@ -149,7 +152,7 @@ abstract class AbstractMawexSpec(_system: ActorSystem) extends TestKit(_system) 
           masterProxy ! Task(taskId, n)
           expectMsg(p2c.Accepted(taskId))
         }
-        val (successes, failures) = receiveResults(6)
+        val (successes, failures) = receiveResults(12)
         assert(failures.size == 2)
         assert(successes.size == 4)
         assertStatus(Set.empty, Set.empty, done => assertResult((1 until taskCounter.get).map(_.toString).toVector)(done), workerStatus => assertResult((1 to 3).map(n => n.toString -> Idle).toMap)(workerStatus))
@@ -162,6 +165,7 @@ abstract class AbstractMawexSpec(_system: ActorSystem) extends TestKit(_system) 
         val taskId = TaskId(nextTaskId.toString, ConsumerGroup)
         masterProxy ! Task(taskId, 1)
         expectMsg(p2c.Accepted(taskId))
+        probe.expectMsgType[TaskScheduled](singleMsgTimeout).taskId should be(TaskId(nextTaskId.toString, ConsumerGroup))
         probe.expectMsgType[TaskResult](singleMsgTimeout).task.id should be(TaskId(nextTaskId.toString, ConsumerGroup))
         assertStatus(Set.empty, Set.empty, _ == (1 until taskCounter.get).map(_.toString).toVector, workerStatus => assertResult(Map("1" -> Idle))(workerStatus))
         forWorkersDo(WorkerDef(WorkerId(ConsumerGroup, "2", "2"), executorProps(TestExecutor.identifyProps))) {  _ =>

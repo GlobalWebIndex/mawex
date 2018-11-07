@@ -20,6 +20,7 @@ object e2w {
 /** proxy <= master */
 object m2p {
   case class TaskAck(taskId: TaskId)
+  case class TaskScheduled(taskId: TaskId)
 }
 
 /** client <= proxy */

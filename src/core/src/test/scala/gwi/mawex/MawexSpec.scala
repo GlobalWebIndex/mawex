@@ -22,13 +22,13 @@ import scala.util.{Failure, Success, Try}
 
 class DefaultMawexSpec(_system: ActorSystem) extends AbstractMawexSpec(_system: ActorSystem) {
   def this() = this(ClusterService.buildClusterSystem(HostAddress("localhost", 0), List.empty, 1))
-  protected def executorProps(underlyingProps: Props): Props = SandBox.defaultProps(underlyingProps)
+  protected def executorProps(underlyingProps: Props): Props = SandBox.localJvmProps(underlyingProps)
   protected def singleMsgTimeout: FiniteDuration = 3.seconds
 }
 
 class ForkedMawexSpec(_system: ActorSystem) extends AbstractMawexSpec(_system: ActorSystem) {
   def this() = this(ClusterService.buildClusterSystem(HostAddress("localhost", 0), List.empty, 1))
-  protected def executorProps(underlyingProps: Props): Props = SandBox.forkProps(underlyingProps, ForkedJvm(System.getProperty("java.class.path"), "-Xmx48m -XX:TieredStopAtLevel=1 -Xverify:none"))
+  protected def executorProps(underlyingProps: Props): Props = SandBox.forkingProps(underlyingProps, ForkedJvm(System.getProperty("java.class.path"), "-Xmx48m -XX:TieredStopAtLevel=1 -Xverify:none"))
   protected def singleMsgTimeout: FiniteDuration = 6.seconds
 }
 

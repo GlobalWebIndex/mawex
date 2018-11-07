@@ -33,12 +33,12 @@ sealed trait SandBox extends Actor with ActorLogging {
 
 object SandBox {
   val ActorName = "SandBox"
-  def defaultProps(executorProps: Props): Props = Props(classOf[DefaultSandBox], executorProps)
-  def forkProps(executorProps: Props, forkedJvm: ForkedJvm): Props = Props(classOf[ForkingSandBox], executorProps, forkedJvm)
+  def localJvmProps(executorProps: Props): Props = Props(classOf[LocalJvmSandBox], executorProps)
+  def forkingProps(executorProps: Props, forkedJvm: ForkedJvm): Props = Props(classOf[ForkingSandBox], executorProps, forkedJvm)
 }
 
 /** SandBox for local JVM execution */
-class DefaultSandBox(executorProps: Props) extends SandBox {
+class LocalJvmSandBox(executorProps: Props) extends SandBox {
   override def receive: Receive = {
     case Task(_, job) =>
      val executor = context.child(Executor.ActorName) getOrElse context.actorOf(executorProps, Executor.ActorName)

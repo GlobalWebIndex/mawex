@@ -175,7 +175,7 @@ object WorkerCmd extends Command(name = "workers", description = "launches worke
         clusterClient,
         WorkerId(consumerGroup, pod),
         taskTimeout.seconds,
-        sandboxJvmOpts.fold(SandBox.localJvmProps(executorProps))(opts => SandBox.forkingProps(executorProps, ForkedJvm("lib/*", opts))),
+        sandboxJvmOpts.fold(SandBox.localJvmProps(executorProps))(opts => SandBox.forkingProps(executorProps, ForkedJvmConf("lib/*", opts))),
         system
       )
     }

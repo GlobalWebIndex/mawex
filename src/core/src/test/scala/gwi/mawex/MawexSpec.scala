@@ -10,7 +10,6 @@ import akka.cluster.pubsub.DistributedPubSub
 import akka.cluster.pubsub.DistributedPubSubMediator.{CurrentTopics, GetTopics, Subscribe, SubscribeAck}
 import akka.testkit.{ImplicitSender, TestKit, TestProbe}
 import com.typesafe.config.ConfigFactory
-import gwi.mawex.ForkingSandBox.ForkedJvm
 import gwi.mawex.RemoteService.HostAddress
 import gwi.mawex.m2p.TaskScheduled
 import org.scalatest.concurrent.Eventually
@@ -29,7 +28,7 @@ class DefaultMawexSpec(_system: ActorSystem) extends AbstractMawexSpec(_system: 
 
 class ForkedMawexSpec(_system: ActorSystem) extends AbstractMawexSpec(_system: ActorSystem) {
   def this() = this(ClusterService.buildClusterSystem(HostAddress("localhost", 0), List.empty, 1))
-  protected def executorProps(underlyingProps: Props): Props = SandBox.forkingProps(underlyingProps, ForkedJvm(System.getProperty("java.class.path"), "-Xmx48m -XX:TieredStopAtLevel=1 -Xverify:none"))
+  protected def executorProps(underlyingProps: Props): Props = SandBox.forkingProps(underlyingProps, ForkedJvmConf(System.getProperty("java.class.path"), "-Xmx64m -XX:TieredStopAtLevel=1 -Xverify:none"))
   protected def singleMsgTimeout: FiniteDuration = 6.seconds
 }
 

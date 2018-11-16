@@ -4,7 +4,6 @@ import akka.actor._
 import akka.cluster.client.{ClusterClient, ClusterClientSettings}
 import akka.cluster.singleton.{ClusterSingletonManager, ClusterSingletonManagerSettings}
 import com.typesafe.config.{ConfigFactory, ConfigValueFactory}
-import gwi.mawex.ForkingSandBox.ForkedJvm
 import gwi.mawex.RemoteService._
 import org.backuity.clist._
 import org.backuity.clist.util.Read
@@ -15,7 +14,7 @@ import scala.concurrent.{Await, ExecutionContext}
 
 object Launcher {
   def main(args: Array[String]): Unit =
-    Cli.parse(args).withProgramName("mawex").withCommands(MasterCmd, WorkerCmd, SandBoxCmd).foreach(_.run())
+    Cli.parse(args).withProgramName("mawex").withCommands(MasterCmd, WorkerCmd).foreach(_.run())
 }
 
 sealed trait MawexService { this: Command =>
@@ -116,17 +115,6 @@ trait ClusterService extends RemoteService { this: Command =>
   }
 
   var seedNodes = opt[List[HostAddress]](useEnv = true, default = List(HostAddress("master", 2552)), description = "12.34.56.78:2551,12.34.56.79:2552")
-}
-
-object SandBoxCmd extends Command(name = "sandbox", description = "executes arbitrary app in forked jvm") with MawexService {
-
-  var timeout       = opt[Int](default = 1800, description = "How many seconds the app can run before it times out")
-  var jvmOpts       = opt[Option[String]]()
-  var mainClass     = arg[String]()
-  var mainClassArgs = arg[Option[String]](required = false)
-
-  def run(): Unit =
-    System.exit(Fork.await(Fork.run(mainClass, "bin/*", jvmOpts, mainClassArgs), timeout.seconds))
 }
 
 object MasterCmd extends Command(name = "master", description = "launches master") with ClusterService {

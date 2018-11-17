@@ -1,17 +1,20 @@
-package gwi.mawex
+package gwi.mawex.master
 
 import akka.Done
 import akka.actor.{ActorContext, ActorRef}
 import akka.event.LoggingAdapter
+import gwi.mawex._
 
 import collection.{breakOut, mutable}
 
-protected[mawex] sealed trait WorkerStatus
-protected[mawex] case object Idle extends WorkerStatus
-protected[mawex] case class Busy(taskId: TaskId) extends WorkerStatus
-protected[mawex] case class WorkerRef(ref: ActorRef, status: WorkerStatus, registrationTime: Long, lastTaskSubmissionTime: Option[Long])
+protected[master] sealed trait WorkerStatus
+protected[master] case object Idle extends WorkerStatus
+protected[master] case class Busy(taskId: TaskId) extends WorkerStatus
+protected[master] case class WorkerRef(ref: ActorRef, status: WorkerStatus, registrationTime: Long, lastTaskSubmissionTime: Option[Long])
+protected[master] case object GetMawexState
+protected[master] case class MawexState(workState: State, workersById: Map[WorkerId, WorkerRef])
 
-protected[mawex] object WorkerRef {
+protected[master] object WorkerRef {
 
   implicit class WorkerRefPimp(underlying: mutable.Map[WorkerId, WorkerRef]) {
 

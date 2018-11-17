@@ -1,9 +1,10 @@
-package gwi.mawex
+package gwi.mawex.executor
 
 import akka.actor.SupervisorStrategy.{Escalate, Stop}
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorLogging, ActorRef, DeathPactException, Deploy, OneForOneStrategy, PoisonPill, Props, ReceiveTimeout}
 import akka.remote.{DisassociatedEvent, RemoteScope}
 import akka.serialization.Serialization
+import gwi.mawex._
 
 import scala.concurrent.duration._
 
@@ -20,7 +21,7 @@ sealed trait SandBox extends Actor with ActorLogging {
 class LocalJvmSandBox(executorProps: Props) extends SandBox {
   override def receive: Receive = {
     case Task(_, job) =>
-      val executor = context.child(Executor.ActorName) getOrElse context.actorOf(executorProps, Executor.ActorName)
+      val executor = context.child(ExecutorCmd.ActorName) getOrElse context.actorOf(executorProps, ExecutorCmd.ActorName)
       executor.forward(job)
   }
 }
@@ -68,7 +69,7 @@ class RemoteSandBox(executor: Executor) extends SandBox {
       log.info(s"Forked Executor registered at $address")
       frontDeskRef = Some(sender())
       context.setReceiveTimeout(Duration.Undefined)
-      val executorRef = context.actorOf(executor.props.withDeploy(Deploy(scope = RemoteScope(address))), Executor.ActorName)
+      val executorRef = context.actorOf(executor.props.withDeploy(Deploy(scope = RemoteScope(address))), ExecutorCmd.ActorName)
       executorRef ! job
       context.become(working(worker, executorRef))
     case ReceiveTimeout =>

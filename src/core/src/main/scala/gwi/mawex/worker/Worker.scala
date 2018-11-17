@@ -1,8 +1,10 @@
-package gwi.mawex
+package gwi.mawex.worker
 
 import akka.actor.SupervisorStrategy.{Restart, Stop}
 import akka.actor._
 import akka.cluster.client.ClusterClient.SendToAll
+import gwi.mawex._
+import gwi.mawex.executor.SandBox
 
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
@@ -48,7 +50,7 @@ class Worker(masterId: String, clusterClient: ActorRef, workerId: WorkerId, exec
 
   def receive: Receive = idle
 
-  def idle: Receive = {
+  private[this] def idle: Receive = {
     case m2w.TaskReady =>
       master_giveMeTask()
 
@@ -60,7 +62,7 @@ class Worker(masterId: String, clusterClient: ActorRef, workerId: WorkerId, exec
       context.become(working)
   }
 
-  def working: Receive = {
+  private[this] def working: Receive = {
     case e2w.TaskExecuted(result) =>
       log.info("Task is complete. Result {}", result)
       master_finishTask(currentTaskId.get, result)
@@ -70,7 +72,7 @@ class Worker(masterId: String, clusterClient: ActorRef, workerId: WorkerId, exec
       master_finishTask(currentTaskId.get, Failure(new RuntimeException(s"Task $currentTaskId timed out in worker $workerId ...")))
   }
 
-  def waitingForAck(result: Try[Any]): Receive = {
+  private[this] def waitingForAck(result: Try[Any]): Receive = {
     case m2w.TaskResultAck(id) if currentTaskId.contains(id) =>
       currentTaskId = Option.empty
       context.setReceiveTimeout(Duration.Undefined)
@@ -94,6 +96,6 @@ object Worker {
     }
   }
 
-  def props(masterId: String, clusterClient: ActorRef, workerId: WorkerId, executorProps: Props, taskTimeout: FiniteDuration, checkinInterval: FiniteDuration = 5.seconds): Props =
+  protected[mawex] def props(masterId: String, clusterClient: ActorRef, workerId: WorkerId, executorProps: Props, taskTimeout: FiniteDuration, checkinInterval: FiniteDuration = 5.seconds): Props =
     Props(classOf[Worker], masterId, clusterClient, workerId, executorProps, taskTimeout, checkinInterval)
 }

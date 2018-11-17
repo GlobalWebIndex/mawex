@@ -1,8 +1,7 @@
-package gwi.mawex
+package gwi.mawex.executor
 
 import java.io.ByteArrayInputStream
 
-import org.apache.commons.codec.binary.Base64
 import io.fabric8.kubernetes.client.{BatchAPIGroupClient, ConfigBuilder}
 import io.kubernetes.client.apis.BatchV1Api
 import io.kubernetes.client.util.Config
@@ -12,7 +11,7 @@ import org.scalatest.{FreeSpecLike, Ignore}
 object K8 {
   val serverApiUrl: String  = ??? // cat ~/.kube/config | grep "server: "
   val token: String         = ??? // cat /run/secrets/kubernetes.io/serviceaccount/token
-  val caCert: String        = ??? // cat /run/secrets/kubernetes.io/serviceaccount/ca.crt | base64 -w 0
+  val caCert: String        = ??? // new String(Base64.decodeBase64(cat /run/secrets/kubernetes.io/serviceaccount/ca.crt | base64 -w 0)
 }
 
 @Ignore
@@ -28,8 +27,8 @@ class K8SandBoxSpec extends FreeSpecLike with K8BatchApiSupport {
   private[this] implicit val batchApi = new BatchV1Api(apiClient)
 
   "k8 client should succeed" in {
-    val conf = K8JobConf("hello-world", "alpine", "default")
-    println(runJob(conf, "df", "-h"))
+    val conf = K8JobConf("hello-world", "alpine", "default", List("df", "-h"))
+    println(runJob(conf))
 
     Thread.sleep(5000)
 
@@ -54,8 +53,8 @@ class Fabric8SandBoxSpec extends FreeSpecLike with Fabric8BatchApiSupport {
 
 
   "fabricate client should succeed" in {
-    val conf = K8JobConf("hello-world", "alpine", "default")
-    println(runJob(conf, "df", "-h"))
+    val conf = K8JobConf("hello-world", "alpine", "default", List("df", "-h"))
+    println(runJob(conf))
 
     Thread.sleep(5000)
 

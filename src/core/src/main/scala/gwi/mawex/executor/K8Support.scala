@@ -1,9 +1,9 @@
-package gwi.mawex
+package gwi.mawex.executor
 
 import java.lang
 
-import io.fabric8.kubernetes.api.model.ContainerBuilder
 import io.fabric8.kubernetes.api.model.batch.{Job, JobBuilder}
+import io.fabric8.kubernetes.api.model.{ContainerBuilder, EnvVarBuilder}
 import io.fabric8.kubernetes.client.BatchAPIGroupClient
 import io.kubernetes.client.apis.BatchV1Api
 import io.kubernetes.client.models._
@@ -12,12 +12,14 @@ import scala.collection.JavaConverters._
 
 trait K8BatchApiSupport {
 
-  protected[mawex] def runJob(k8JobConf: K8JobConf, commands: String*)(implicit batchApi: BatchV1Api): V1Job = {
+  protected[mawex] def runJob(k8JobConf: K8JobConf)(implicit batchApi: BatchV1Api): V1Job = {
+    val envVars = k8JobConf.opts.map( opt => new V1EnvVarBuilder().withName("JAVA_TOOL_OPTIONS").withValue(opt).build() ).toList.asJava
     val container =
       new V1ContainerBuilder(true)
         .withName(k8JobConf.jobName)
         .withImage(k8JobConf.image)
-        .withCommand(commands.asJava)
+        .withEnv(envVars)
+        .withCommand(k8JobConf.commands.asJava)
         .build
 
     val job =
@@ -39,12 +41,14 @@ trait K8BatchApiSupport {
 
 trait Fabric8BatchApiSupport {
 
-  protected[mawex] def runJob(k8JobConf: K8JobConf, commands: String*)(implicit batchApi: BatchAPIGroupClient): Job = {
+  protected[mawex] def runJob(k8JobConf: K8JobConf)(implicit batchApi: BatchAPIGroupClient): Job = {
+    val envVars = k8JobConf.opts.map( opt => new EnvVarBuilder().withName("JAVA_TOOL_OPTIONS").withValue(opt).build() ).toList.asJava
     val container =
       new ContainerBuilder(true)
         .withName(k8JobConf.jobName)
         .withImage(k8JobConf.image)
-        .withCommand(commands.asJava)
+        .withEnv(envVars)
+        .withCommand(k8JobConf.commands.asJava)
         .build
 
     batchApi.jobs.create(

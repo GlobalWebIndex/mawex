@@ -1,14 +1,16 @@
-package gwi.mawex
+package gwi.mawex.master
 
-object State {
+import gwi.mawex.{Task, TaskId}
 
-  def empty: State = State(pendingTasks = Map.empty, progressingTasks = Map.empty, doneTaskIds = Vector.empty)
+protected[master] object State {
 
-  trait TaskDomainEvent
-  case class TaskAccepted(task: Task) extends TaskDomainEvent
-  case class TaskStarted(taskId: TaskId) extends TaskDomainEvent
-  case class TaskCompleted(taskId: TaskId, result: Any) extends TaskDomainEvent
-  case class TaskFailed(taskId: TaskId) extends TaskDomainEvent
+  protected[master] def empty: State = State(pendingTasks = Map.empty, progressingTasks = Map.empty, doneTaskIds = Vector.empty)
+
+  protected[master] trait TaskDomainEvent
+  protected[master] case class TaskAccepted(task: Task) extends TaskDomainEvent
+  protected[master] case class TaskStarted(taskId: TaskId) extends TaskDomainEvent
+  protected[master] case class TaskCompleted(taskId: TaskId, result: Any) extends TaskDomainEvent
+  protected[master] case class TaskFailed(taskId: TaskId) extends TaskDomainEvent
 
   implicit class VectorPimp(underlying: Vector[TaskId]) {
     def fifo(e: TaskId, limit: Int): Vector[TaskId] = {
@@ -22,20 +24,20 @@ object State {
 }
 
 /** Persistent Actor Event Sourced State tracking progress of mawex */
-case class State private(private val pendingTasks: Map[Task, Long], private val progressingTasks: Map[Task, Long], private val doneTaskIds: Vector[TaskId]) {
+protected[master] case class State private(private val pendingTasks: Map[Task, Long], private val progressingTasks: Map[Task, Long], private val doneTaskIds: Vector[TaskId]) {
   import State._
 
   private[this] val DoneTasksLimit = 1000
 
-  def getPendingTasks: Map[Task, Long] = pendingTasks
-  def getProgressingTasks: Map[Task, Long] = progressingTasks
-  def getPendingTaskIds: Map[TaskId, Long] = pendingTasks.map { case (task, ts) => task.id -> ts }
-  def getProgressingTaskIds: Map[TaskId, Long] = progressingTasks.map { case (task, ts) => task.id -> ts }
-  def isAccepted(taskId: TaskId): Boolean = pendingTasks.exists(_._1.id == taskId)
-  def getTaskInProgress(taskId: TaskId): Option[Task] = progressingTasks.keySet.find(_.id == taskId)
-  def getDoneTaskIds: Vector[TaskId] = doneTaskIds
+  protected[master] def getPendingTasks: Map[Task, Long] = pendingTasks
+  protected[master] def getProgressingTasks: Map[Task, Long] = progressingTasks
+  protected[master] def getPendingTaskIds: Map[TaskId, Long] = pendingTasks.map { case (task, ts) => task.id -> ts }
+  protected[master] def getProgressingTaskIds: Map[TaskId, Long] = progressingTasks.map { case (task, ts) => task.id -> ts }
+  protected[master] def isAccepted(taskId: TaskId): Boolean = pendingTasks.exists(_._1.id == taskId)
+  protected[master] def getTaskInProgress(taskId: TaskId): Option[Task] = progressingTasks.keySet.find(_.id == taskId)
+  protected[master] def getDoneTaskIds: Vector[TaskId] = doneTaskIds
 
-  def getPendingTasksConsumerGroups: Seq[String] =
+  protected[master] def getPendingTasksConsumerGroups: Seq[String] =
     pendingTasks.toSeq
       .map { case (task, ts) => task.id.consumerGroup -> ts }
       .groupBy(_._1)
@@ -43,7 +45,7 @@ case class State private(private val pendingTasks: Map[Task, Long], private val 
       .sortBy(_._2)
       .map(_._1)
 
-  def updated(event: TaskDomainEvent): State = event match {
+  protected[master] def updated(event: TaskDomainEvent): State = event match {
     case TaskAccepted(task) =>
       copy(pendingTasks = pendingTasks.updated(task, Master.distinctCurrentMillis))
 

@@ -1,4 +1,4 @@
-package gwi.mawex
+package gwi.mawex.master
 
 import akka.actor.{ActorLogging, ActorRef, Props, Terminated}
 import akka.cluster.Cluster
@@ -6,11 +6,11 @@ import akka.cluster.client.ClusterClientReceptionist
 import akka.cluster.pubsub.{DistributedPubSub, DistributedPubSubMediator}
 import akka.event.LoggingAdapter
 import akka.persistence.PersistentActor
-import gwi.mawex.State._
+import gwi.mawex._
+import gwi.mawex.master.State._
 
-import scala.collection.mutable
+import scala.collection.{breakOut, mutable}
 import scala.concurrent.duration._
-import scala.collection.breakOut
 
 class Master(conf: Master.Config) extends PersistentActor with ActorLogging {
   import Master._
@@ -168,9 +168,9 @@ object Master {
 
   case class Config(masterId: String, progressingTaskTimeout: FiniteDuration, pendingTaskTimeout: FiniteDuration, workerCheckinInterval: FiniteDuration = 5.seconds)
 
-  protected[mawex] sealed trait HeartBeat
-  protected[mawex] case object Validate extends HeartBeat
-  protected[mawex] case object Cleanup extends HeartBeat
+  protected[master] sealed trait HeartBeat
+  protected[master] case object Validate extends HeartBeat
+  protected[master] case object Cleanup extends HeartBeat
 
   def props(config: Config): Props = Props(classOf[Master], config)
 

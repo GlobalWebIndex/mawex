@@ -10,8 +10,8 @@ import scala.util.{Failure, Success, Try}
   * as their execution cannot affect the host JVM which increases the overall resiliency of the system
   */
 object Fork {
-  def run(className: String, classPath: String, jvmOpts: Option[String], argsOpt: Option[String]): Process = {
-    val command = Seq("java", "-cp", classPath, className) ++ argsOpt
+  def run(className: String, classPath: String, jvmOpts: Option[String], args: List[String]): Process = {
+    val command = Seq("java", "-cp", classPath, className) ++ args
     val builder = new ProcessBuilder(command:_*)
     jvmOpts.foreach(opts => builder.environment().put("JAVA_TOOL_OPTIONS", opts + " -XX:+ExitOnOutOfMemoryError"))
     Process(builder).run(false)

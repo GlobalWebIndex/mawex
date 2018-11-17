@@ -1,4 +1,4 @@
-package gwi.mawex
+package gwi.mawex.master
 
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 
@@ -11,7 +11,10 @@ import akka.cluster.pubsub.DistributedPubSubMediator.{CurrentTopics, GetTopics, 
 import akka.testkit.{ImplicitSender, TestKit, TestProbe}
 import com.typesafe.config.ConfigFactory
 import gwi.mawex.RemoteService.HostAddress
+import gwi.mawex._
+import gwi.mawex.executor.{ForkedJvmConf, SandBox}
 import gwi.mawex.m2p.TaskScheduled
+import gwi.mawex.worker.Worker
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.{Millis, Seconds, Span}
 import org.scalatest.{BeforeAndAfterAll, FreeSpecLike, Matchers}
@@ -28,7 +31,7 @@ class DefaultMawexSpec(_system: ActorSystem) extends AbstractMawexSpec(_system: 
 
 class ForkedMawexSpec(_system: ActorSystem) extends AbstractMawexSpec(_system: ActorSystem) {
   def this() = this(ClusterService.buildClusterSystem(HostAddress("localhost", 0), List.empty, 1))
-  protected def executorProps(underlyingProps: Props): Props = SandBox.forkingProps(underlyingProps, ForkedJvmConf(System.getProperty("java.class.path"), "-Xmx64m -XX:TieredStopAtLevel=1 -Xverify:none"))
+  protected def executorProps(underlyingProps: Props): Props = SandBox.forkingProps(underlyingProps, ForkedJvmConf(System.getProperty("java.class.path"), List("executor"), Some("-Xmx64m -XX:TieredStopAtLevel=1 -Xverify:none")))
   protected def singleMsgTimeout: FiniteDuration = 6.seconds
 }
 

@@ -29,7 +29,3 @@ object s2e {
 object e2s {
   case object RegisterExecutor
 }
-
-/** Testing */
-protected[mawex] case object GetMawexState
-protected[mawex] case class MawexState(workState: State, workersById: Map[WorkerId, WorkerRef])

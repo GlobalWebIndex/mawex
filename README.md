@@ -55,7 +55,7 @@
 
 ^^ Executor
   +-------------------------------+
-  |SandBox (host JVM / Forked JVM)|
+  |SandBox (current/forked JVM/k8s|
   | +---------------------------+ |
   | |Executor                   | |
   | | +-----------------------+ | |
@@ -84,7 +84,9 @@ System is designed for :
       you would create a dedicated pod for the mission critical worker and a second pod for those 6 workers,
       this way the mission critical worker is not affected by runtime of the others
  2. resiliency :
-    - tasks are executed by Executor in forked JVM process, so called sandbox, which minimizes possibility of system failures
+    - tasks are executed by Executor in so called sandbox which is either current JVM process, forked JVM process or as a k8s job
+    - the 2 latter sandboxes minimize possibility of system failures, however they are slower and not suitable for many small jobs
+        - run small jobs in current JVM process and long running resource intensive jobs either in forked JVM process or as a k8s job
 
 Tasks that are going to Consumer Groups A,B or C,D,E,F are similarly resource demanding so they can live on
 the same machines. Master executes tasks sequentially within a Pod, never concurrently, so that you can

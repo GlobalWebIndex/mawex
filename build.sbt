@@ -4,10 +4,6 @@ import Deploy._
 lazy val javaDockerImage  = "anapsix/alpine-java:8u144b01_jdk_unlimited"
 lazy val s3Resolver       = "S3 Snapshots" at "s3://public.maven.globalwebindex.net.s3-eu-west-1.amazonaws.com/snapshots"
 
-lazy val tempKryoDep          = "net.globalwebindex" %% "akka-kryo-serialization" % "0.5.3-SNAPSHOT" // adhoc published before PR is merged https://github.com/romix/akka-kryo-serialization/pull/124
-lazy val k8sJavaClientDep     = "io.kubernetes"       % "client-java"             % "3.0.0"
-lazy val fabric8JavaClientDep = "io.fabric8"          % "kubernetes-client"       % "4.1.0" exclude("io.sundr", "sundr-codegen")
-
 crossScalaVersions in ThisBuild := Seq("2.12.6", "2.11.8")
 organization in ThisBuild := "net.globalwebindex"
 libraryDependencies in ThisBuild ++= clist ++ loggingApi
@@ -28,7 +24,7 @@ lazy val mawex = (project in file("src/core"))
   .enablePlugins(DockerPlugin, SmallerDockerPlugin, JavaAppPackaging)
   .settings(fork in Test := true)
   .settings(libraryDependencies ++=
-    Seq(loggingImplLogback, akkaCluster, akkaPersistence, tempKryoDep, fabric8JavaClientDep, k8sJavaClientDep, akkaClusterCustomDowning, akkaPersistenceInMemory % "test", akkaTestkit, scalatest)
+    Seq(loggingImplLogback, akkaCluster, akkaPersistence, akkaKryoSerialization, fabric8JavaClient, k8sJavaClient, akkaClusterCustomDowning, akkaPersistenceInMemory, akkaTestkit, scalatest)
   ).settings(publishSettings("globalWebIndex", "mawex-core", s3Resolver))
   .settings(Deploy.settings("gwiq", "mawex-core", "gwi.mawex.Launcher"))
   .dependsOn(`mawex-api` % "compile->compile;test->test")

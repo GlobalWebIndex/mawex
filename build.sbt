@@ -8,7 +8,6 @@ lazy val tempKryoDep          = "net.globalwebindex" %% "akka-kryo-serialization
 lazy val k8sJavaClientDep     = "io.kubernetes"       % "client-java"             % "3.0.0"
 lazy val fabric8JavaClientDep = "io.fabric8"          % "kubernetes-client"       % "4.1.0" exclude("io.sundr", "sundr-codegen")
 
-version in ThisBuild := "0.4.8"
 crossScalaVersions in ThisBuild := Seq("2.12.6", "2.11.8")
 organization in ThisBuild := "net.globalwebindex"
 libraryDependencies in ThisBuild ++= clist ++ loggingApi
@@ -23,25 +22,25 @@ cancelable in ThisBuild := true
 
 lazy val mawex = (project in file("."))
   .settings(aggregate in update := false)
-  .settings(publish := { })
-  .aggregate(`Mawex-api`, `Mawex-core`, `Mawex-example`)
+  .settings(publish := {})
+  .aggregate(`mawex-api`, `mawex-core`, `mawex-example`)
 
-lazy val `Mawex-api` = (project in file("src/api"))
+lazy val `mawex-api` = (project in file("src/api"))
   .settings(publishSettings("globalWebIndex", "mawex-api", s3Resolver))
   .settings(libraryDependencies ++= Seq(akkaActor, akkaClusterTools))
 
-lazy val `Mawex-core` = (project in file("src/core"))
+lazy val `mawex-core` = (project in file("src/core"))
   .enablePlugins(DockerPlugin, SmallerDockerPlugin, JavaAppPackaging)
   .settings(fork in Test := true)
   .settings(libraryDependencies ++=
     Seq(loggingImplLogback, akkaCluster, akkaPersistence, tempKryoDep, fabric8JavaClientDep, k8sJavaClientDep, akkaClusterCustomDowning, akkaPersistenceInMemory % "test", akkaTestkit, scalatest)
   ).settings(publishSettings("globalWebIndex", "mawex-core", s3Resolver))
   .settings(Deploy.settings("gwiq", "mawex", "gwi.mawex.Launcher"))
-  .dependsOn(`Mawex-api` % "compile->compile;test->test")
+  .dependsOn(`mawex-api` % "compile->compile;test->test")
 
-lazy val `Mawex-example` = (project in file("src/example"))
+lazy val `mawex-example` = (project in file("src/example"))
   .enablePlugins(DockerPlugin, SmallerDockerPlugin, JavaAppPackaging)
   .settings(publish := {})
   .settings(libraryDependencies ++= Seq(loggingImplLogback))
-  .settings(Deploy.settings("gwiq", "mawex", "gwi.mawex.ExampleLauncher"))
-  .dependsOn(`Mawex-core` % "compile->compile;test->test")
+  .settings(Deploy.settings("gwiq", "mawex-example", "gwi.mawex.ExampleLauncher"))
+  .dependsOn(`mawex-core` % "compile->compile;test->test")

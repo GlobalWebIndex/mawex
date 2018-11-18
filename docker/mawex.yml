@@ -4,26 +4,26 @@ services:
     # master system uses akka cluster Singleton and akka persistence so that if if master-a crashes then master-b takes over
 
     master-a:
-        image: gwiq/mawex-example-server:latest
+        image: gwiq/mawex-example:latest
         ports:
             - 2552:2552
         command: master --host-address=master-a:2552 --seed-nodes=master-a:2552,master-b:2551
 
     master-b:
-        image: gwiq/mawex-example-server:latest
+        image: gwiq/mawex-example:latest
         ports:
             - 2551:2551
         command: master --host-address=master-b:2551 --seed-nodes=master-a:2552,master-b:2551
 
     workers:
-        image: gwiq/mawex-example-server:latest
+        image: gwiq/mawex-example:latest
         depends_on:
             - master-a
             - master-b
         command: workers --host-address=workers:0 --seed-nodes=master-a:2552,master-b:2551 --sandbox-jvm-opts=-Xmx64m gwi.mawex.ExampleExecutor gwi.mawex.ExampleCommandBuilder --foo=bar
 
     client:
-        image: gwiq/mawex-example-client:latest
+        image: gwiq/mawex-example:latest
         depends_on:
             - workers
-        command: --host-address=client:0 --seed-nodes=master-a:2552,master-b:2551
+        command: client --host-address=client:0 --seed-nodes=master-a:2552,master-b:2551

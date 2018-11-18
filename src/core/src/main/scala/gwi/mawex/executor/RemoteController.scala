@@ -1,6 +1,7 @@
 package gwi.mawex.executor
 
 import akka.actor._
+import com.typesafe.scalalogging.LazyLogging
 import gwi.mawex.{Fork, Launcher}
 import io.kubernetes.client.Configuration
 import io.kubernetes.client.apis.BatchV1Api
@@ -19,7 +20,7 @@ trait ExecutorConf
 
 /** Controller starts executor in a forked JVM process **/
 case class ForkedJvmConf(classPath: String) extends ExecutorConf
-case class ForkingController(executorProps: Props, executorConf: ForkedJvmConf) extends RemoteController {
+case class ForkingController(executorProps: Props, executorConf: ForkedJvmConf) extends RemoteController with LazyLogging {
 
   private[this] var process: Option[Process] = Option.empty
 
@@ -36,11 +37,16 @@ case class ForkingController(executorProps: Props, executorConf: ForkedJvmConf) 
   }
 
   override def onStop(): Unit = {
-    (1 to 10).foldLeft(process.exists(_.isAlive())) {
+    (1 to 3).foldLeft(process.exists(_.isAlive())) {
       case (acc, counter) if acc =>
-        Thread.sleep(500)
-        if (counter == 10) process.foreach(p => Try(p.destroy()))
-        process.exists(_.isAlive())
+        logger.info("JVM process is still alive, waiting a second ...")
+        Thread.sleep(1000)
+        val stillAlive = process.exists(_.isAlive())
+        if (counter == 3 && stillAlive) {
+          logger.info("JVM process did not die, destroying ...")
+          process.foreach(p => Try(p.destroy()))
+        }
+        stillAlive
       case _ =>
         false
     }

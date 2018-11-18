@@ -33,10 +33,11 @@ class LocalJvmSandBox(executorProps: Props) extends SandBox {
   */
 class RemoteSandBox(controller: RemoteController, executorCmd: ExecutorCmd) extends SandBox {
   private[this] var frontDeskRef: Option[ActorRef] = Option.empty
-  private[this] def onTerminate(): Unit = {
-    controller.onStop()
+  private[this] def shutDownRemoteActorSystem(): Unit = {
+    log.info("Shutting down Remote Actor System !!!")
     frontDeskRef.foreach(_ ! s2e.TerminateExecutor)
     frontDeskRef = Option.empty
+    controller.onStop()
   }
 
   override def supervisorStrategy: OneForOneStrategy = OneForOneStrategy() {
@@ -47,7 +48,7 @@ class RemoteSandBox(controller: RemoteController, executorCmd: ExecutorCmd) exte
   }
 
   override def preStart(): Unit = context.system.eventStream.subscribe(self, classOf[DisassociatedEvent])
-  override def postStop(): Unit = onTerminate()
+  override def postStop(): Unit = shutDownRemoteActorSystem()
 
   override def unhandled(message: Any): Unit = message match {
     case DisassociatedEvent(local, remote, _) =>
@@ -82,7 +83,7 @@ class RemoteSandBox(controller: RemoteController, executorCmd: ExecutorCmd) exte
       executor ! PoisonPill
       log.warning(s"Executor finished task with result : ${taskExecuted.result}")
       worker ! taskExecuted
-      onTerminate()
+      shutDownRemoteActorSystem()
       context.become(idle)
   }
 

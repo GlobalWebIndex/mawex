@@ -3,6 +3,7 @@ package gwi.mawex.executor
 import java.util.concurrent.atomic.AtomicBoolean
 
 import akka.actor.{Actor, ActorSelection, Address, AddressFromURIString, Props}
+import com.typesafe.scalalogging.LazyLogging
 import gwi.mawex.{MawexService, RemoteService, e2s, s2e}
 import org.backuity.clist.{Command, arg}
 
@@ -15,7 +16,7 @@ case class ExecutorCmd(commands: List[String], jvmOpts: Option[String] = None) {
     copy(commands = commands :+ s"--sandbox-actor-path=$sandBoxSerializedActorPath")
 }
 
-object ExecutorCmd extends Command(name = "executor", description = "launches executor") with MawexService {
+object ExecutorCmd extends Command(name = "executor", description = "launches executor") with MawexService with LazyLogging {
   val ActorName   = "Executor"
   val SystemName  = "ExecutorSystem"
 
@@ -34,6 +35,7 @@ object ExecutorCmd extends Command(name = "executor", description = "launches ex
     val executorSystem = RemoteService.buildRemoteSystem(Address("akka.tcp", SystemName, AddressFromURIString(sandboxActorPath).host.get, 0))
     executorSystem.actorOf(Props(classOf[SandboxFrontDesk], executorSystem.actorSelection(sandboxActorPath)))
     executorSystem.whenTerminated.onComplete { _ =>
+      logger.info("Remote Actor System just shut down, exiting jvm process !!!")
       systemTerminated.set(true)
       System.exit(0)
     }(ExecutionContext.Implicits.global)

@@ -4,9 +4,20 @@ import akka.actor.{ActorSystem, AddressFromURIString, Props, RootActorPath}
 import akka.cluster.Cluster
 import com.typesafe.config.ConfigFactory
 import gwi.mawex.RemoteService.HostAddress
-import org.backuity.clist.CliMain
+import gwi.mawex.executor.ExecutorCmd
+import gwi.mawex.master.MasterCmd
+import gwi.mawex.worker.WorkerCmd
+import org.backuity.clist.{Cli, Command}
 
-object Client extends CliMain[Unit](name = "client", description = "launches client") with ClusterService {
+object ExampleLauncher {
+  def main(args: Array[String]): Unit =
+    Cli.parse(args)
+      .withProgramName("mawex")
+      .withCommands(MasterCmd, WorkerCmd, ExecutorCmd, ClientCmd)
+      .foreach(_.run())
+}
+
+object ClientCmd extends Command(name = "client", description = "launches client") with ClusterService {
 
   val MasterId = "master"
 
@@ -34,5 +45,5 @@ object Client extends CliMain[Unit](name = "client", description = "launches cli
     system.actorOf(Props[Consumer], "consumer")
   }
 
-  override def run: Unit = startRemoteClient(hostAddress, seedNodes)
+  def run(): Unit = startRemoteClient(hostAddress, seedNodes)
 }

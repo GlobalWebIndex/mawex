@@ -1,8 +1,7 @@
 import Dependencies._
 import Deploy._
 
-lazy val javaDockerImage  = "anapsix/alpine-java:8u144b01_jdk_unlimited"
-lazy val s3Resolver       = "S3 Snapshots" at "s3://public.maven.globalwebindex.net.s3-eu-west-1.amazonaws.com/snapshots"
+lazy val s3Resolver = "S3 Snapshots" at "s3://public.maven.globalwebindex.net.s3-eu-west-1.amazonaws.com/snapshots"
 
 crossScalaVersions in ThisBuild := Seq("2.12.6", "2.11.8")
 organization in ThisBuild := "net.globalwebindex"

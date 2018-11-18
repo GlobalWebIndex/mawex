@@ -1,6 +1,6 @@
 ## mawex
 
-[![Build Status](https://travis-ci.org/GlobalWebIndex/mawex.svg?branch=master)](https://travis-ci.org/GlobalWebIndex/mawex)
+[![DroneCI](https://drone.globalwebindex.net/api/badges/GlobalWebIndex/mawex/status.svg)](https://drone.globalwebindex.net/GlobalWebIndex/mawex)
 
 ```
 +-------------------------------------------------------------------------------------+

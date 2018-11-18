@@ -17,25 +17,26 @@ sealed trait SandBox extends Actor with ActorLogging {
   }
 }
 
-/** SandBox for local JVM execution */
+/** SandBox for local JVM execution, it just simply forwards Task/Result from Worker to executor */
 class LocalJvmSandBox(executorProps: Props) extends SandBox {
   override def receive: Receive = {
     case Task(_, job) =>
-      val executor = context.child(ExecutorCmd.ActorName) getOrElse context.actorOf(executorProps, ExecutorCmd.ActorName)
-      executor.forward(job)
+      context
+        .child(ExecutorCmd.ActorName)
+        .getOrElse(context.actorOf(executorProps, ExecutorCmd.ActorName))
+        .forward(job)
   }
 }
 
 /**
-  * Execution happens in a forked JVM or k8 job, actor system is started there in order for the input and complex results to be passed/returned through akka remoting
-  * Mawex SandBoxes are like a runtime environment for executors, resilient, it escalates errors from underlying executors to Worker that is responsible for Executor failures
+  * Execution happens safely in a forked JVM process or k8 job, actor system is started there in order for the input and complex results to be passed/returned through akka remoting
   */
-class RemoteSandBox(executor: Executor) extends SandBox {
+class RemoteSandBox(controller: RemoteController, executorCmd: ExecutorCmd) extends SandBox {
   private[this] var frontDeskRef: Option[ActorRef] = Option.empty
   private[this] def onTerminate(): Unit = {
+    controller.onStop()
     frontDeskRef.foreach(_ ! s2e.TerminateExecutor)
     frontDeskRef = Option.empty
-    executor.onStop()
   }
 
   override def supervisorStrategy: OneForOneStrategy = OneForOneStrategy() {
@@ -60,7 +61,7 @@ class RemoteSandBox(executor: Executor) extends SandBox {
     case Task(_, job) =>
       context.become(awaitingForkRegistration(sender(), job))
       context.setReceiveTimeout(5.seconds)
-      executor.run(Serialization.serializedActorPath(self))
+      controller.start(executorCmd.activate(Serialization.serializedActorPath(self)))
   }
 
   def awaitingForkRegistration(worker: ActorRef, job: Any): Receive = {
@@ -69,7 +70,7 @@ class RemoteSandBox(executor: Executor) extends SandBox {
       log.info(s"Forked Executor registered at $address")
       frontDeskRef = Some(sender())
       context.setReceiveTimeout(Duration.Undefined)
-      val executorRef = context.actorOf(executor.props.withDeploy(Deploy(scope = RemoteScope(address))), ExecutorCmd.ActorName)
+      val executorRef = context.actorOf(controller.executorProps.withDeploy(Deploy(scope = RemoteScope(address))), ExecutorCmd.ActorName)
       executorRef ! job
       context.become(working(worker, executorRef))
     case ReceiveTimeout =>
@@ -91,8 +92,8 @@ object SandBox {
   val ActorName = "SandBox"
   def localJvmProps(executorProps: Props): Props =
     Props(classOf[LocalJvmSandBox], executorProps)
-  def forkingProps(executorProps: Props, forkedJvm: ForkedJvmConf): Props =
-    Props(classOf[RemoteSandBox], ForkingExecutor(executorProps, forkedJvm))
-  def k8JobProps(executorProps: Props, k8JobConf: K8JobConf): Props =
-    Props(classOf[RemoteSandBox], K8JobExecutor(executorProps, k8JobConf))
+  def forkingProps(executorProps: Props, forkedJvm: ForkedJvmConf, executorCmd: ExecutorCmd): Props =
+    Props(classOf[RemoteSandBox], ForkingController(executorProps, forkedJvm), executorCmd)
+  def k8JobProps(executorProps: Props, k8JobConf: K8JobConf, executorCmd: ExecutorCmd): Props =
+    Props(classOf[RemoteSandBox], K8JobController(executorProps, k8JobConf), executorCmd)
 }

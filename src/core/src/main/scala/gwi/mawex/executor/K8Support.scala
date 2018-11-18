@@ -12,14 +12,14 @@ import scala.collection.JavaConverters._
 
 trait K8BatchApiSupport {
 
-  protected[mawex] def runJob(k8JobConf: K8JobConf)(implicit batchApi: BatchV1Api): V1Job = {
-    val envVars = k8JobConf.opts.map( opt => new V1EnvVarBuilder().withName("JAVA_TOOL_OPTIONS").withValue(opt).build() ).toList.asJava
+  protected[mawex] def runJob(k8JobConf: K8JobConf, executorCmd: ExecutorCmd)(implicit batchApi: BatchV1Api): V1Job = {
+    val envVars = executorCmd.jvmOpts.map( opt => new V1EnvVarBuilder().withName("JAVA_TOOL_OPTIONS").withValue(opt).build() ).toList.asJava
     val container =
       new V1ContainerBuilder(true)
         .withName(k8JobConf.jobName)
         .withImage(k8JobConf.image)
         .withEnv(envVars)
-        .withCommand(k8JobConf.commands.asJava)
+        .withCommand(executorCmd.commands.asJava)
         .build
 
     val job =
@@ -41,14 +41,14 @@ trait K8BatchApiSupport {
 
 trait Fabric8BatchApiSupport {
 
-  protected[mawex] def runJob(k8JobConf: K8JobConf)(implicit batchApi: BatchAPIGroupClient): Job = {
-    val envVars = k8JobConf.opts.map( opt => new EnvVarBuilder().withName("JAVA_TOOL_OPTIONS").withValue(opt).build() ).toList.asJava
+  protected[mawex] def runJob(k8JobConf: K8JobConf, executorCmd: ExecutorCmd)(implicit batchApi: BatchAPIGroupClient): Job = {
+    val envVars = executorCmd.jvmOpts.map( opt => new EnvVarBuilder().withName("JAVA_TOOL_OPTIONS").withValue(opt).build() ).toList.asJava
     val container =
       new ContainerBuilder(true)
         .withName(k8JobConf.jobName)
         .withImage(k8JobConf.image)
         .withEnv(envVars)
-        .withCommand(k8JobConf.commands.asJava)
+        .withCommand(executorCmd.commands.asJava)
         .build
 
     batchApi.jobs.create(

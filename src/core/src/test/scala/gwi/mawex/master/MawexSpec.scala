@@ -12,7 +12,7 @@ import akka.testkit.{ImplicitSender, TestKit, TestProbe}
 import com.typesafe.config.ConfigFactory
 import gwi.mawex.RemoteService.HostAddress
 import gwi.mawex._
-import gwi.mawex.executor.{ForkedJvmConf, SandBox}
+import gwi.mawex.executor.{ExecutorCmd, ForkedJvmConf, SandBox}
 import gwi.mawex.m2p.TaskScheduled
 import gwi.mawex.worker.Worker
 import org.scalatest.concurrent.Eventually
@@ -23,7 +23,7 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.util.{Failure, Success, Try}
 
-class DefaultMawexSpec(_system: ActorSystem) extends AbstractMawexSpec(_system: ActorSystem) {
+class LocalMawexSpec(_system: ActorSystem) extends AbstractMawexSpec(_system: ActorSystem) {
   def this() = this(ClusterService.buildClusterSystem(HostAddress("localhost", 0), List.empty, 1))
   protected def executorProps(underlyingProps: Props): Props = SandBox.localJvmProps(underlyingProps)
   protected def singleMsgTimeout: FiniteDuration = 3.seconds
@@ -31,17 +31,26 @@ class DefaultMawexSpec(_system: ActorSystem) extends AbstractMawexSpec(_system: 
 
 class ForkedMawexSpec(_system: ActorSystem) extends AbstractMawexSpec(_system: ActorSystem) {
   def this() = this(ClusterService.buildClusterSystem(HostAddress("localhost", 0), List.empty, 1))
-  protected def executorProps(underlyingProps: Props): Props = SandBox.forkingProps(underlyingProps, ForkedJvmConf(System.getProperty("java.class.path"), List("executor"), Some("-Xmx64m -XX:TieredStopAtLevel=1 -Xverify:none")))
+  protected def executorProps(underlyingProps: Props): Props = SandBox.forkingProps(underlyingProps, ForkedJvmConf(System.getProperty("java.class.path")), ExecutorCmd(Some(jvmOpts)))
   protected def singleMsgTimeout: FiniteDuration = 6.seconds
 }
+
+/*
+class K8sMawexSpec(_system: ActorSystem) extends AbstractMawexSpec(_system: ActorSystem) {
+  def this() = this(ClusterService.buildClusterSystem(HostAddress("localhost", 0), List.empty, 1))
+  protected def executorProps(underlyingProps: Props): Props = SandBox.k8JobProps(underlyingProps, K8JobConf("test", ), ExecutorCmd(Some(jvmOpts)))
+  protected def singleMsgTimeout: FiniteDuration = 12.seconds
+}
+*/
 
 abstract class AbstractMawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSupport with Matchers with FreeSpecLike with BeforeAndAfterAll with ImplicitSender with Eventually {
   import AbstractMawexSpec._
 
-  private[this] val workerSystem = ActorSystem("ClusterSystem", config)
+  private[this] val workerSystem  = ActorSystem("ClusterSystem", config)
   private[this] val ConsumerGroup = "default"
-  private[this] val Pod = "default"
-  private[this] val MasterId = "master"
+  private[this] val Pod           = "default"
+  private[this] val MasterId      = "master"
+  protected[this] val jvmOpts     = "-Xshare:on -Djava.awt.headless=true -Xms32m -Xmx64m -XX:TieredStopAtLevel=1 -Xverify:none"
 
   protected def executorProps(underlyingProps: Props): Props
   protected def singleMsgTimeout: FiniteDuration

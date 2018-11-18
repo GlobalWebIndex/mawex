@@ -9,14 +9,14 @@ import gwi.mawex.executor.SandBox
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
-class Worker(masterId: String, clusterClient: ActorRef, workerId: WorkerId, executorProps: Props, taskTimeout: FiniteDuration, checkinInterval: FiniteDuration) extends Actor with ActorLogging {
+class Worker(masterId: String, clusterClient: ActorRef, workerId: WorkerId, sandBoxProps: Props, taskTimeout: FiniteDuration, checkinInterval: FiniteDuration) extends Actor with ActorLogging {
   import Worker._
   import context.dispatcher
 
-  private[this] val MasterAddress = s"/user/$masterId/singleton"
-  private[this] val checkinWorker = master_checkMeInPeriodically
-  private[this] val taskExecutor  = context.actorOf(executorProps, SandBox.ActorName)
-  private[this] var currentTaskId = Option.empty[TaskId]
+  private[this] val MasterAddress   = s"/user/$masterId/singleton"
+  private[this] val checkinWorker   = master_checkMeInPeriodically
+  private[this] val executorSandBox = context.actorOf(sandBoxProps, SandBox.ActorName)
+  private[this] var currentTaskId   = Option.empty[TaskId]
 
   override def supervisorStrategy = OneForOneStrategy() {
     case _: ActorInitializationException => Stop
@@ -57,7 +57,7 @@ class Worker(masterId: String, clusterClient: ActorRef, workerId: WorkerId, exec
     case task@Task(id, _) =>
       log.info("Got task: {}", task)
       currentTaskId = Some(id)
-      taskExecutor ! task
+      executorSandBox ! task
       context.setReceiveTimeout(taskTimeout)
       context.become(working)
   }
@@ -68,7 +68,7 @@ class Worker(masterId: String, clusterClient: ActorRef, workerId: WorkerId, exec
       master_finishTask(currentTaskId.get, result)
     case ReceiveTimeout =>
       log.warning("No response from Executor to Worker ...")
-      taskExecutor ! Kill
+      executorSandBox ! Kill
       master_finishTask(currentTaskId.get, Failure(new RuntimeException(s"Task $currentTaskId timed out in worker $workerId ...")))
   }
 
@@ -96,6 +96,6 @@ object Worker {
     }
   }
 
-  protected[mawex] def props(masterId: String, clusterClient: ActorRef, workerId: WorkerId, executorProps: Props, taskTimeout: FiniteDuration, checkinInterval: FiniteDuration = 5.seconds): Props =
-    Props(classOf[Worker], masterId, clusterClient, workerId, executorProps, taskTimeout, checkinInterval)
+  protected[mawex] def props(masterId: String, clusterClient: ActorRef, workerId: WorkerId, sandBoxProps: Props, taskTimeout: FiniteDuration, checkinInterval: FiniteDuration = 5.seconds): Props =
+    Props(classOf[Worker], masterId, clusterClient, workerId, sandBoxProps, taskTimeout, checkinInterval)
 }

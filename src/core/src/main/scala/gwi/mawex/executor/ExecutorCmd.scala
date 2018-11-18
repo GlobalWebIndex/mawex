@@ -10,6 +10,11 @@ import scala.concurrent.{Await, ExecutionContext}
 import scala.concurrent.duration._
 import scala.sys.ShutdownHookThread
 
+case class ExecutorCmd(commands: List[String], jvmOpts: Option[String] = None) {
+  def activate(sandBoxSerializedActorPath: String): ExecutorCmd =
+    copy(commands = commands :+ s"--sandbox-actor-path=$sandBoxSerializedActorPath")
+}
+
 object ExecutorCmd extends Command(name = "executor", description = "launches executor") with MawexService {
   val ActorName   = "Executor"
   val SystemName  = "ExecutorSystem"
@@ -36,4 +41,7 @@ object ExecutorCmd extends Command(name = "executor", description = "launches ex
   }
 
   def run(): Unit = startAndRegisterExecutorToSandBox
+
+  def apply(jvmOpts: Option[String]): ExecutorCmd =
+    ExecutorCmd(List("executor"), jvmOpts)
 }

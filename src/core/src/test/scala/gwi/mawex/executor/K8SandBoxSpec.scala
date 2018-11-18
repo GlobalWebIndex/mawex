@@ -6,6 +6,7 @@ import io.fabric8.kubernetes.client.{BatchAPIGroupClient, ConfigBuilder}
 import io.kubernetes.client.apis.BatchV1Api
 import io.kubernetes.client.util.Config
 import okhttp3.OkHttpClient
+import org.apache.commons.codec.binary.Base64
 import org.scalatest.{FreeSpecLike, Ignore}
 
 object K8 {
@@ -27,8 +28,8 @@ class K8SandBoxSpec extends FreeSpecLike with K8BatchApiSupport {
   private[this] implicit val batchApi = new BatchV1Api(apiClient)
 
   "k8 client should succeed" in {
-    val conf = K8JobConf("hello-world", "alpine", "default", List("df", "-h"))
-    println(runJob(conf))
+    val conf = K8JobConf("hello-world", "alpine", "default")
+    println(runJob(conf, ExecutorCmd(List("df", "-h"), None)))
 
     Thread.sleep(5000)
 
@@ -53,8 +54,8 @@ class Fabric8SandBoxSpec extends FreeSpecLike with Fabric8BatchApiSupport {
 
 
   "fabricate client should succeed" in {
-    val conf = K8JobConf("hello-world", "alpine", "default", List("df", "-h"))
-    println(runJob(conf))
+    val conf = K8JobConf("hello-world", "alpine", "default")
+    println(runJob(conf, ExecutorCmd(List("df", "-h"), None)))
 
     Thread.sleep(5000)
 

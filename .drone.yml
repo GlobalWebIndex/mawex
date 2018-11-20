@@ -36,7 +36,7 @@ pipeline:
   publish-maven-artifacts:
     image: gwiq/sbt-docker:1.2.4
     commands:
-      - sbt -mem 1024 -Djline.terminal=off -Dcoursier.cache=./.coursier -Dsbt.ivy.home=./.ivy2 -Dfile.encoding=utf-8 ${APP}/publish
+      - sbt -mem 1024 -Djline.terminal=off -Dcoursier.cache=./.coursier -Dsbt.ivy.home=./.ivy2 -Dfile.encoding=utf-8 mawex-${APP}/publish
     secrets:
       - source: aws_access_key_id
         target: aws_access_key_id
@@ -54,7 +54,7 @@ pipeline:
   stage-docker-image:
     image: gwiq/sbt-docker:1.2.4
     commands:
-      - sbt -mem 1024 -Djline.terminal=off -Dcoursier.cache=./.coursier -Dsbt.ivy.home=./.ivy2 -Dfile.encoding=utf-8 ${APP}/docker:stage
+      - sbt -mem 1024 -Djline.terminal=off -Dcoursier.cache=./.coursier -Dsbt.ivy.home=./.ivy2 -Dfile.encoding=utf-8 mawex-${APP}/docker:stage
     secrets:
       - source: aws_access_key_id
         target: aws_access_key_id
@@ -99,7 +99,7 @@ pipeline:
       - source: aws_region
         target: aws_region
     commands:
-      - docker build -t local/$APP:$DRONE_COMMIT_SHA ./src/$APP/target/docker/stage
+      - docker build -t local/$APP:$DRONE_COMMIT_SHA ./src/mawex-$APP/target/docker/stage
       - docker login -u "$DOCKER_USER" -p "$DOCKER_PASSWORD"
       - docker tag local/$APP:$DRONE_COMMIT_SHA $IMAGE_NAME:$DRONE_COMMIT_SHA
       - docker push $IMAGE_NAME:$DRONE_COMMIT_SHA
@@ -130,7 +130,7 @@ pipeline:
       - source: aws_region
         target: aws_region
     commands:
-      - docker build -t local/$APP:$RELEASE ./src/$APP/target/docker/stage
+      - docker build -t local/$APP:$RELEASE ./src/mawex-$APP/target/docker/stage
       - docker login -u "$DOCKER_USER" -p "$DOCKER_PASSWORD"
       - docker tag local/$APP:$RELEASE $IMAGE_NAME:$RELEASE
       - docker push $IMAGE_NAME:$RELEASE

@@ -1,5 +1,6 @@
 import Dependencies._
 import Deploy._
+import sbt.Keys.publish
 
 lazy val s3Resolver = "S3 Snapshots" at "s3://public.maven.globalwebindex.net.s3-eu-west-1.amazonaws.com/snapshots"
 
@@ -17,6 +18,7 @@ cancelable in ThisBuild := true
 
 lazy val `mawex-api` = (project in file("src/api"))
   .settings(publishSettings("globalWebIndex", "mawex-api", s3Resolver))
+  .settings(stage in Docker := null)
   .settings(libraryDependencies ++= Seq(akkaActor, akkaClusterTools))
 
 lazy val `mawex-core` = (project in file("src/core"))

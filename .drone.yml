@@ -99,7 +99,7 @@ pipeline:
       - source: aws_region
         target: aws_region
     commands:
-      - docker build -t local/$APP:$DRONE_COMMIT_SHA ./src/mawex-$APP/target/docker/stage
+      - docker build -t local/$APP:$DRONE_COMMIT_SHA ./src/$APP/target/docker/stage
       - docker login -u "$DOCKER_USER" -p "$DOCKER_PASSWORD"
       - docker tag local/$APP:$DRONE_COMMIT_SHA $IMAGE_NAME:$DRONE_COMMIT_SHA
       - docker push $IMAGE_NAME:$DRONE_COMMIT_SHA
@@ -107,8 +107,8 @@ pipeline:
       event: deployment
       matrix:
         APP:
-        - core
-        - example
+          - core
+          - example
 
   build-on-tag:
     image: docker:stable
@@ -130,7 +130,7 @@ pipeline:
       - source: aws_region
         target: aws_region
     commands:
-      - docker build -t local/$APP:$RELEASE ./src/mawex-$APP/target/docker/stage
+      - docker build -t local/$APP:$RELEASE ./src/$APP/target/docker/stage
       - docker login -u "$DOCKER_USER" -p "$DOCKER_PASSWORD"
       - docker tag local/$APP:$RELEASE $IMAGE_NAME:$RELEASE
       - docker push $IMAGE_NAME:$RELEASE
@@ -139,11 +139,11 @@ pipeline:
       event: tag
       matrix:
         APP:
-        - core
-        - example
+          - core
+          - example
 
 matrix:
   APP:
-  - api
-  - core
-  - example
+    - api
+    - core
+    - example

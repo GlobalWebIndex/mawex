@@ -10,9 +10,9 @@ import org.apache.commons.codec.binary.Base64
 import org.scalatest.{FreeSpecLike, Ignore}
 
 object K8 {
-  lazy val serverApiUrl: String  = ??? // cat ~/.kube/config | grep "server: "
-  lazy val token: String         = ??? // cat /run/secrets/kubernetes.io/serviceaccount/token
-  lazy val caCert: String        = ??? // new String(Base64.decodeBase64(cat /run/secrets/kubernetes.io/serviceaccount/ca.crt | base64 -w 0)
+  lazy val serverApiUrl: String  = "xxx" // cat ~/.kube/config | grep "server: "
+  lazy val token: String         = "xxx" // cat /run/secrets/kubernetes.io/serviceaccount/token
+  lazy val caCert: String        = "xxx" // new String(Base64.decodeBase64(cat /run/secrets/kubernetes.io/serviceaccount/ca.crt | base64 -w 0)
 }
 
 @Ignore

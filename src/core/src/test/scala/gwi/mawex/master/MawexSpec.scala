@@ -50,7 +50,7 @@ abstract class AbstractMawexSpec(_system: ActorSystem) extends TestKit(_system) 
   private[this] val ConsumerGroup = "default"
   private[this] val Pod           = "default"
   private[this] val MasterId      = "master"
-  protected[this] val jvmOpts     = "-Xshare:on -Djava.awt.headless=true -Xms32m -Xmx64m -XX:TieredStopAtLevel=1 -Xverify:none"
+  protected[this] val jvmOpts     = "-Djava.awt.headless=true -Xms32m -Xmx64m -XX:TieredStopAtLevel=1 -Xverify:none"
 
   protected def executorProps(underlyingProps: Props): Props
   protected def singleMsgTimeout: FiniteDuration

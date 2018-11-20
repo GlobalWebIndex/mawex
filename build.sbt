@@ -1,6 +1,5 @@
 import Dependencies._
 import Deploy._
-import sbt.Keys.publish
 
 lazy val s3Resolver = "S3 Snapshots" at "s3://public.maven.globalwebindex.net.s3-eu-west-1.amazonaws.com/snapshots"
 
@@ -15,10 +14,11 @@ resolvers in ThisBuild ++= Seq(
 version in ThisBuild ~= (_.replace('+', '-'))
 dynver in ThisBuild ~= (_.replace('+', '-'))
 cancelable in ThisBuild := true
+publishArtifact in ThisBuild := false
+stage in (ThisBuild, Docker) := null
 
 lazy val `mawex-api` = (project in file("src/api"))
   .settings(publishSettings("globalWebIndex", "mawex-api", s3Resolver))
-  .settings(stage in Docker := null)
   .settings(libraryDependencies ++= Seq(akkaActor, akkaClusterTools))
 
 lazy val `mawex-core` = (project in file("src/core"))
@@ -32,7 +32,6 @@ lazy val `mawex-core` = (project in file("src/core"))
 
 lazy val example = (project in file("src/example"))
   .enablePlugins(DockerPlugin, SmallerDockerPlugin, JavaAppPackaging)
-  .settings(publish := {})
   .settings(libraryDependencies ++= Seq(loggingImplLogback))
   .settings(Deploy.settings("gwiq", "mawex-example", "gwi.mawex.ExampleLauncher"))
   .dependsOn(`mawex-core` % "compile->compile;test->test")

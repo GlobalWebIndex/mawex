@@ -19,13 +19,13 @@ object K8 {
 class K8SandBoxSpec extends FreeSpecLike with K8BatchApiSupport {
   import K8._
 
-  private val apiClient =
+  private lazy val apiClient =
     Config.fromToken(
       serverApiUrl,
       token,
     ).setSslCaCert(new ByteArrayInputStream(caCert.getBytes()))
 
-  private[this] implicit val batchApi = new BatchV1Api(apiClient)
+  private[this] implicit lazy val batchApi = new BatchV1Api(apiClient)
 
   "k8 client should succeed" in {
     val conf = K8JobConf("hello-world", "alpine", "default")
@@ -42,7 +42,7 @@ class K8SandBoxSpec extends FreeSpecLike with K8BatchApiSupport {
 class Fabric8SandBoxSpec extends FreeSpecLike with Fabric8BatchApiSupport {
   import K8._
 
-  private val config =
+  private lazy val config =
     new ConfigBuilder()
       .withMasterUrl(serverApiUrl)
       .withOauthToken(token)

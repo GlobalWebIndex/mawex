@@ -7,7 +7,7 @@ class Consumer extends Actor with ActorLogging {
 
   private[this] val mediator = DistributedPubSub(context.system).mediator
 
-  mediator ! DistributedPubSubMediator.Subscribe(Client.MasterId, self)
+  mediator ! DistributedPubSubMediator.Subscribe(ClientCmd.MasterId, self)
 
   override def preStart(): Unit = {
     log.info("Consumer started ...")

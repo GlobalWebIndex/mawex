@@ -50,7 +50,7 @@ class Fabric8SandBoxSpec extends FreeSpecLike with Fabric8BatchApiSupport {
       .build
 
   val httpClient = new OkHttpClient()
-  implicit val apiClient = new BatchAPIGroupClient(httpClient, config)
+  implicit lazy val apiClient = new BatchAPIGroupClient(httpClient, config)
 
 
   "fabricate client should succeed" in {

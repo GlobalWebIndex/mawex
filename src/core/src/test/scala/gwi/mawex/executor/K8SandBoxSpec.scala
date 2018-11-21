@@ -26,16 +26,16 @@ class K8SandBoxSpec extends FreeSpecLike with K8BatchApiSupport {
     Config.fromToken(
       K8.conf.serverApiUrl,
       K8.conf.token,
-    ).setSslCaCert(new ByteArrayInputStream(K8.conf.caCert.getBytes()))
+    ).setSslCaCert(new ByteArrayInputStream(K8.conf.caCert.getBytes())).setDebugging(true)
 
   private[this] implicit lazy val batchApi = new BatchV1Api(apiClient)
 
   "k8 client should succeed" in {
-    println(runJob(K8.conf, ExecutorCmd(List("df", "-h"), None)))
+    runJob(K8.conf, ExecutorCmd(List("df", "-h"), None))
 
     Thread.sleep(5000)
 
-    println(deleteJob(K8.conf))
+    deleteJob(K8.conf)
   }
 
 }

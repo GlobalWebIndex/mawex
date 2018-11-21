@@ -27,7 +27,7 @@ case class ForkingController(executorProps: Props, executorConf: ForkedJvmConf) 
 
   private[this] var process: Option[Process] = Option.empty
 
-  override def start(executorCmd: ExecutorCmd): Unit = {
+  override def start(executorCmd: ExecutorCmd): Unit = Try {
     process =
       Option(
         Fork.run(
@@ -68,10 +68,10 @@ case class K8JobController(executorProps: Props, executorConf: K8JobConf) extend
         executorConf.serverApiUrl,
         executorConf.token,
       ).setSslCaCert(new ByteArrayInputStream(executorConf.caCert.getBytes()))
+        .setDebugging(true)
     )
 
-  override def start(executorCmd: ExecutorCmd): Unit =
-    runJob(executorConf, executorCmd)
+  override def start(executorCmd: ExecutorCmd): Unit = Try(runJob(executorConf, executorCmd))
 
   override def onStop(): Unit = Try(deleteJob(executorConf))
 }

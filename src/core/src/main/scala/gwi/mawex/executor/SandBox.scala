@@ -62,7 +62,7 @@ class RemoteSandBox(controller: RemoteController, executorCmd: ExecutorCmd) exte
     case Task(_, job) =>
       context.become(awaitingForkRegistration(sender(), job))
       context.setReceiveTimeout(5.seconds)
-      controller.start(executorCmd.activate(Serialization.serializedActorPath(self)))
+      controller.start(executorCmd.activate(Serialization.serializedActorPath(self))) // TODO  what if this fails ???
   }
 
   def awaitingForkRegistration(worker: ActorRef, job: Any): Receive = {
@@ -75,7 +75,7 @@ class RemoteSandBox(controller: RemoteController, executorCmd: ExecutorCmd) exte
       executorRef ! job
       context.become(working(worker, executorRef))
     case ReceiveTimeout =>
-      log.warning("Forked Executor Remote actor system has not registered !!!")
+      log.warning("Forked Executor Remote actor system has not registered !!!") // TODO  now what ?
   }
 
   def working(worker: ActorRef, executor: ActorRef): Receive = {

@@ -112,9 +112,19 @@ When you deploy a cluster of Master and Worker nodes, you are free to stop/start
 and tasks would be pending until corresponding Worker shows up. This is good for deployment purposes because Workers are being developed continually
 and you can ship them without restarting whole cluster, even if you don't have redundant workers, task would wait in Master until corresponding Worker asks for it.
 
+
+### Example setup
+
 ```
 $ cd docker
-$ docker-compose -f ${plugin}.yml -f mawex.yml up
+$ docker-compose -f local-worker.yml -f mawex.yml up
+```
+or
+```
+$ cd docker
+$ echo "service-account-token" > token
+$ echo "your-certificate" > ca.crt
+$ docker-compose -f k8s-worker.yml -f mawex.yml up
 ```
 
 ### how-to ( W.I.P. )

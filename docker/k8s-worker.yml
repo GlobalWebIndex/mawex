@@ -1,0 +1,13 @@
+version: '2'
+services:
+
+    worker:
+      image: gwiq/mawex-example:latest
+      environment:
+        - KUBERNETES_SERVICE_HOST=https://104.155.127.136
+      volumes:
+        - "./:/var/run/secrets/kubernetes.io/serviceaccount/"
+      depends_on:
+        - master-a
+        - master-b
+      command: workers --host-address=workers:0 --seed-nodes=master-a:2552,master-b:2551 --sandbox-jvm-opts=-Xmx64m --executor-type=k8s --k8s-docker-image=gwiq/mawex-example:latest gwi.mawex.ExampleExecutor gwi.mawex.ExampleCommandBuilder --foo=bar

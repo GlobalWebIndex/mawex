@@ -25,7 +25,10 @@ lazy val `mawex-core` = (project in file("src/core"))
   .enablePlugins(DockerPlugin, SmallerDockerPlugin, JavaAppPackaging)
   .settings(fork in Test := true)
   .settings(libraryDependencies ++=
-    Seq(loggingImplLogback, akkaCluster, akkaPersistence, akkaPersistenceQuery, akkaKryoSerialization, fabric8JavaClient, k8sJavaClient, akkaClusterCustomDowning, akkaPersistenceInMemory, akkaTestkit, scalatest)
+    Seq(
+      akkaCluster, akkaPersistence, akkaPersistenceQuery, akkaKryoSerialization, akkaClusterCustomDowning,
+      fabric8JavaClient, k8sJavaClient, loggingImplLogback, akkaPersistenceInMemory % "test", akkaTestkit, scalatest
+    )
   ).settings(publishSettings("globalWebIndex", "mawex-core", s3Resolver))
   .settings(Deploy.settings("gwiq", "mawex-core", "gwi.mawex.Launcher"))
   .dependsOn(`mawex-api` % "compile->compile;test->test")
@@ -33,6 +36,6 @@ lazy val `mawex-core` = (project in file("src/core"))
 lazy val `mawex-example` = (project in file("src/example"))
   .enablePlugins(DockerPlugin, SmallerDockerPlugin, JavaAppPackaging)
   .settings(version := "latest")
-  .settings(libraryDependencies ++= Seq(akkaCluster, akkaPersistence, akkaPersistenceRedis, akkaPersistenceDynamoDB, loggingImplLogback))
+  .settings(libraryDependencies ++= Seq(akkaCluster, akkaPersistence, akkaPersistenceInMemory, loggingImplLogback))
   .settings(Deploy.settings("gwiq", "mawex-example", "gwi.mawex.ExampleLauncher"))
   .dependsOn(`mawex-core` % "compile->compile;test->test")

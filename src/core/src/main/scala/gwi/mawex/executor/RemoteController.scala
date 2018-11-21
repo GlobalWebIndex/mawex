@@ -1,11 +1,12 @@
 package gwi.mawex.executor
 
+import java.io.ByteArrayInputStream
 import java.nio.file.{Files, Paths}
 
 import akka.actor._
 import com.typesafe.scalalogging.LazyLogging
 import gwi.mawex.{Fork, Launcher}
-import io.kubernetes.client.Configuration
+import io.kubernetes.client.util.Config
 import io.kubernetes.client.apis.BatchV1Api
 
 import scala.sys.process.Process
@@ -61,7 +62,13 @@ case class ForkingController(executorProps: Props, executorConf: ForkedJvmConf) 
 case class K8JobConf(jobName: String, image: String, namespace: String, serverApiUrl: String, token: String, caCert: String) extends ExecutorConf
 case class K8JobController(executorProps: Props, executorConf: K8JobConf) extends RemoteController with K8BatchApiSupport {
 
-  private[this] implicit val batchApi = new BatchV1Api(Configuration.getDefaultApiClient)
+  private[this] implicit val batchApi =
+    new BatchV1Api(
+      Config.fromToken(
+        executorConf.serverApiUrl,
+        executorConf.token,
+      ).setSslCaCert(new ByteArrayInputStream(executorConf.caCert.getBytes()))
+    )
 
   override def start(executorCmd: ExecutorCmd): Unit =
     runJob(executorConf, executorCmd)

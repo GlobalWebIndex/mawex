@@ -32,6 +32,7 @@ lazy val `mawex-core` = (project in file("src/core"))
 
 lazy val `mawex-example` = (project in file("src/example"))
   .enablePlugins(DockerPlugin, SmallerDockerPlugin, JavaAppPackaging)
+  .settings(version := "latest")
   .settings(libraryDependencies ++= Seq(akkaCluster, akkaPersistence, akkaPersistenceRedis, akkaPersistenceDynamoDB, loggingImplLogback))
   .settings(Deploy.settings("gwiq", "mawex-example", "gwi.mawex.ExampleLauncher"))
   .dependsOn(`mawex-core` % "compile->compile;test->test")

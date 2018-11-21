@@ -31,7 +31,7 @@ object ClientCmd extends Command(name = "client", description = "launches client
       }
       """.stripMargin
     ).withFallback(ConfigFactory.parseResources("serialization.conf"))
-      .withFallback(ConfigFactory.parseResources("reference.conf")).resolve()
+      .withFallback(ConfigFactory.load())
 
     implicit val system = ActorSystem("ClusterSystem", conf)
 

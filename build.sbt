@@ -30,7 +30,7 @@ lazy val `mawex-core` = (project in file("src/core"))
   .settings(Deploy.settings("gwiq", "mawex-core", "gwi.mawex.Launcher"))
   .dependsOn(`mawex-api` % "compile->compile;test->test")
 
-lazy val example = (project in file("src/example"))
+lazy val `mawex-example` = (project in file("src/example"))
   .enablePlugins(DockerPlugin, SmallerDockerPlugin, JavaAppPackaging)
   .settings(libraryDependencies ++= Seq(loggingImplLogback))
   .settings(Deploy.settings("gwiq", "mawex-example", "gwi.mawex.ExampleLauncher"))

@@ -39,7 +39,7 @@ case class ForkingController(executorProps: Props, executorConf: ForkedJvmConf) 
       )
   }
 
-  override def onStop(): Unit = {
+  override def onStop(): Unit = Try {
     (1 to 3).foldLeft(process.exists(_.isAlive())) {
       case (acc, counter) if acc =>
         logger.info("JVM process is still alive, waiting a second ...")
@@ -73,7 +73,7 @@ case class K8JobController(executorProps: Props, executorConf: K8JobConf) extend
   override def start(executorCmd: ExecutorCmd): Unit =
     runJob(executorConf, executorCmd)
 
-  override def onStop(): Unit = deleteJob(executorConf)
+  override def onStop(): Unit = Try(deleteJob(executorConf))
 }
 
 object K8JobConf {

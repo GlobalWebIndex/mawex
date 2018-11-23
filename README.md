@@ -126,11 +126,3 @@ $ docker-compose up
 "net.globalwebindex" %% "mawex-api" % "x.y.z" // In case you want to use mawex remotely via `RemoteMasterProxy`
 "net.globalwebindex" %% "mawex-core" % "x.y.z" // In case you want to use mawex within your actor system programatically via `LocalMasterProxy`, see `./example`
 ```
-or
-```
-dependsOn(ProjectRef(uri("https://github.com/GlobalWebIndex/mawex.git#vx.y.x"), "mawex-api"))
-dependsOn(ProjectRef(uri("https://github.com/GlobalWebIndex/mawex.git#vx.y.x"), "mawex-core"))
-```
-
-Then all you need to do is supplying your fat Jar to a Worker which is currently done by extending docker image and copying the fat jar on classpath.
-This is going to change in future by downloading jars from a repository.

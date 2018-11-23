@@ -1,9 +1,0 @@
-version: '2'
-services:
-
-    worker:
-      image: gwiq/mawex-example:latest
-      depends_on:
-        - master-a
-        - master-b
-      command: workers --host-address=workers:0 --seed-nodes=master-a:2552,master-b:2551 --sandbox-jvm-opts=-Xmx64m gwi.mawex.ExampleExecutor gwi.mawex.ExampleCommandBuilder --foo=bar

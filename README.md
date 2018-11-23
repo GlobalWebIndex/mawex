@@ -117,14 +117,7 @@ and you can ship them without restarting whole cluster, even if you don't have r
 
 ```
 $ cd docker
-$ docker-compose -f local-worker.yml -f mawex.yml up
-```
-or
-```
-$ cd docker
-$ echo "service-account-token" > token
-$ echo "your-certificate" > ca.crt
-$ docker-compose -f k8s-worker.yml -f mawex.yml up
+$ docker-compose up
 ```
 
 ### how-to ( W.I.P. )

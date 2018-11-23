@@ -15,6 +15,15 @@ services:
           - 2551:2551
         command: master --host-address=master-b:2551 --seed-nodes=master-a:2552,master-b:2551
 
+    worker:
+        image: gwiq/mawex-example:latest
+        depends_on:
+          - master-a
+          - master-b
+        command: workers --host-address=workers:0 --seed-nodes=master-a:2552,master-b:2551 --sandbox-jvm-opts=-Xmx64m gwi.mawex.ExampleExecutor gwi.mawex.ExampleCommandBuilder --foo=bar
+
     client:
         image: gwiq/mawex-example:latest
+        depends_on:
+          - worker
         command: client --host-address=client:0 --seed-nodes=master-a:2552,master-b:2551

@@ -16,8 +16,8 @@ class Consumer extends Actor with ActorLogging {
   def receive = {
     case _: DistributedPubSubMediator.SubscribeAck =>
       log.info("Subscribed to mediator ...")
-    case TaskResult(_, result) =>
-      log.info("Consumed result: {}", result)
+    case TaskResult(taskId, result) =>
+      log.info("Consumed task () result: {}", taskId, result)
   }
 
 }

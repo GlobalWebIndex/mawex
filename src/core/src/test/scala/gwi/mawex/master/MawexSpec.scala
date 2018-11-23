@@ -35,14 +35,6 @@ class ForkedMawexSpec(_system: ActorSystem) extends AbstractMawexSpec(_system: A
   protected def singleMsgTimeout: FiniteDuration = 6.seconds
 }
 
-/*
-class K8sMawexSpec(_system: ActorSystem) extends AbstractMawexSpec(_system: ActorSystem) {
-  def this() = this(ClusterService.buildClusterSystem(HostAddress("localhost", 0), List.empty, 1))
-  protected def executorProps(underlyingProps: Props): Props = SandBox.k8JobProps(underlyingProps, K8JobConf("test", ), ExecutorCmd(Some(jvmOpts)))
-  protected def singleMsgTimeout: FiniteDuration = 12.seconds
-}
-*/
-
 abstract class AbstractMawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSupport with Matchers with FreeSpecLike with BeforeAndAfterAll with ImplicitSender with Eventually {
   import AbstractMawexSpec._
 
@@ -138,7 +130,7 @@ abstract class AbstractMawexSpec(_system: ActorSystem) extends TestKit(_system) 
     }
     val (successes, failures) = receiveResults(28)
     assert(failures.isEmpty)
-    successes.toVector.map(_.task.id.id.toInt).toSet should be(nextTaskIds.toSet)
+    successes.toVector.map(_.taskId.id.toInt).toSet should be(nextTaskIds.toSet)
     assert(successes.map(_.result.get.asInstanceOf[String]).toSet.size == refSize)
   }
 
@@ -150,7 +142,7 @@ abstract class AbstractMawexSpec(_system: ActorSystem) extends TestKit(_system) 
         masterProxy ! Task(taskId, 1)
         expectMsg(singleMsgTimeout, p2c.Accepted(taskId))
         probe.expectMsgType[m2p.TaskScheduled](singleMsgTimeout).taskId should be(TaskId(nextTaskId.toString, ConsumerGroup))
-        probe.expectMsgType[TaskResult](singleMsgTimeout).task.id should be(TaskId(nextTaskId.toString, ConsumerGroup))
+        probe.expectMsgType[TaskResult](singleMsgTimeout).taskId should be(TaskId(nextTaskId.toString, ConsumerGroup))
         assertStatus(Set.empty, Set.empty, done => assertResult(Vector(nextTaskId.toString))(done), workerStatus => assertResult(Map("1" -> Idle))(workerStatus))
       }
     }
@@ -177,7 +169,7 @@ abstract class AbstractMawexSpec(_system: ActorSystem) extends TestKit(_system) 
         masterProxy ! Task(taskId, 1)
         expectMsg(p2c.Accepted(taskId))
         probe.expectMsgType[TaskScheduled](singleMsgTimeout).taskId should be(TaskId(nextTaskId.toString, ConsumerGroup))
-        probe.expectMsgType[TaskResult](singleMsgTimeout).task.id should be(TaskId(nextTaskId.toString, ConsumerGroup))
+        probe.expectMsgType[TaskResult](singleMsgTimeout).taskId should be(TaskId(nextTaskId.toString, ConsumerGroup))
         assertStatus(Set.empty, Set.empty, _ == (1 until taskCounter.get).map(_.toString).toVector, workerStatus => assertResult(Map("1" -> Idle))(workerStatus))
         forWorkersDo(WorkerDef(WorkerId(ConsumerGroup, "2", "2"), executorProps(TestExecutor.identifyProps))) {  _ =>
           submitTasksAndValidate(2, _ => ConsumerGroup)
@@ -274,10 +266,10 @@ object AbstractMawexSpec {
 
   class FailingExecutor extends Actor {
     def receive = {
-      case n: Int =>
+      case Task(taskId, n: Int) =>
         if (n == 3) throw new RuntimeException("Failing executor crashed !!!")
-        val result = if (n == 4) Failure(new RuntimeException("Failing executor's task crashed !!!")) else Success(context.parent.path.name)
-        sender() ! e2w.TaskExecuted(result)
+        val result = if (n == 4) Left("Failing executor's task crashed !!!") else Right(context.parent.path.name)
+        sender() ! TaskResult(taskId, result)
     }
   }
 
@@ -303,17 +295,17 @@ object AbstractMawexSpec {
 
   class TestExecutor(evalOpt: Option[Evaluation] = Option.empty) extends Actor {
     def receive = {
-      case _ =>
+      case Task(id, _) =>
         val result =
           evalOpt match {
             case None =>
-              Success(context.parent.path.toString)
+              Right(context.parent.path.toString)
             case Some(evaluation) if evaluation.eval =>
-              Success(context.parent.path.toString)
+              Right(context.parent.path.toString)
             case _ =>
-              Failure(new RuntimeException("Predicate failed !!!"))
+              Left("Predicate failed !!!")
           }
-        sender() ! e2w.TaskExecuted(result)
+        sender() ! TaskResult(id, result)
     }
   }
 

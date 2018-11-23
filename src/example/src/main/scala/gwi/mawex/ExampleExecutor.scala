@@ -2,7 +2,6 @@ package gwi.mawex
 
 import akka.actor.{Actor, ActorLogging}
 
-import scala.util.Success
 import org.backuity.clist._
 
 case class ExampleCommand(foo: String) extends MawexCommand {
@@ -26,7 +25,7 @@ class ExampleExecutor(cmd: ExampleCommand) extends Actor with ActorLogging {
     log.info("ExampleExecutor started ...")
 
   def receive = {
-    case n: Int => sender() ! e2w.TaskExecuted(Success(cmd.multiply(n)))
+    case Task(id, n: Int) => sender() ! TaskResult(id, Right(cmd.multiply(n)))
   }
 
 }

@@ -1,21 +1,15 @@
 package gwi.mawex
 
 import org.backuity.clist.Command
-import scala.util.Try
 
 /**
   *  client => proxy =>
-  *                  Master <=> Workers
+  *                  Master <=> Workers <=> Executor
   *  client <= proxy <=
   */
 case class TaskId(id: String, consumerGroup: String)
 case class Task(id: TaskId, job: Any)
-case class TaskResult(task: Task, result: Either[String, Any])
-
-/** Executor => Worker */
-object e2w {
-  case class TaskExecuted(result: Try[Any])
-}
+case class TaskResult(taskId: TaskId, result: Either[String, Any])
 
 /** proxy <= master */
 object m2p {

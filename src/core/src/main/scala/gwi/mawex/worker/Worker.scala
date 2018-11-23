@@ -10,7 +10,6 @@ import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
 class Worker(masterId: String, clusterClient: ActorRef, workerId: WorkerId, sandBoxProps: Props, taskTimeout: FiniteDuration, checkinInterval: FiniteDuration) extends Actor with ActorLogging {
-  import Worker._
   import context.dispatcher
 
   private[this] val MasterAddress   = s"/user/$masterId/singleton"
@@ -23,7 +22,7 @@ class Worker(masterId: String, clusterClient: ActorRef, workerId: WorkerId, sand
     case _: DeathPactException           => Stop
     case ex: Exception =>
       log.error(ex, "Executor crashed !!!")
-      currentTaskId.foreach(master_finishTask(_, Failure(ex)))
+      currentTaskId.foreach(master_finishTask(_, Left(s"Executor crashed, ${ex.getMessage}")))
       Restart
   }
 
@@ -42,7 +41,7 @@ class Worker(masterId: String, clusterClient: ActorRef, workerId: WorkerId, sand
   private[this] def master_checkMeInPeriodically =
     context.system.scheduler.schedule(5.millis, checkinInterval, clusterClient, SendToAll(MasterAddress, w2m.CheckIn(workerId)))
 
-  private[this] def master_finishTask(taskId: TaskId, result: Try[Any]) = {
+  private[this] def master_finishTask(taskId: TaskId, result: Either[String, Any]) = {
     clusterClient ! SendToAll(MasterAddress, w2m.TaskFinished(workerId, taskId, result))
     context.setReceiveTimeout(5.seconds)
     context.become(waitingForAck(result))
@@ -63,16 +62,16 @@ class Worker(masterId: String, clusterClient: ActorRef, workerId: WorkerId, sand
   }
 
   private[this] def working: Receive = {
-    case e2w.TaskExecuted(result) =>
+    case TaskResult(taskId, result) =>
       log.info("Task is complete. Result {}", result)
-      master_finishTask(currentTaskId.get, result)
+      master_finishTask(taskId, result)
     case ReceiveTimeout =>
       log.warning("No response from Executor to Worker ...")
       executorSandBox ! Kill
-      master_finishTask(currentTaskId.get, Failure(new RuntimeException(s"Task $currentTaskId timed out in worker $workerId ...")))
+      master_finishTask(currentTaskId.get, Left(s"Task $currentTaskId timed out in worker $workerId ..."))
   }
 
-  private[this] def waitingForAck(result: Try[Any]): Receive = {
+  private[this] def waitingForAck(result: Either[String, Any]): Receive = {
     case m2w.TaskResultAck(id) if currentTaskId.contains(id) =>
       currentTaskId = Option.empty
       context.setReceiveTimeout(Duration.Undefined)

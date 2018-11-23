@@ -51,7 +51,7 @@ object WorkerCmd extends Command(name = "workers", description = "launches worke
       SandBox.forkingProps(executorProps, ForkedJvmConf(forkedJvmClassPath), ExecutorCmd(sandboxJvmOpts))
     case "k8s" =>
       val k8Image = k8sDockerImage.getOrElse(throw new IllegalArgumentException("k8sDockerImage not specified !!!"))
-      SandBox.k8JobProps(executorProps, K8JobConf(s"$consumerGroup-$pod", k8Image, k8sNamespace), ExecutorCmd(sandboxJvmOpts))
+      SandBox.k8JobProps(executorProps, K8JobConf(k8Image, k8sNamespace), ExecutorCmd(sandboxJvmOpts))
     case x =>
       throw new IllegalArgumentException(s"Executor type $x is not valid, please choose between local / forked / k8s")
   }

@@ -5,7 +5,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import akka.actor.{Actor, ActorSelection, Address, AddressFromURIString, Props}
 import com.typesafe.scalalogging.LazyLogging
 import gwi.mawex.{MawexService, RemoteService, e2s, s2e}
-import org.backuity.clist.{Command, arg}
+import org.backuity.clist.{Command, opt}
 
 import scala.concurrent.{Await, ExecutionContext}
 import scala.concurrent.duration._
@@ -27,13 +27,14 @@ object ExecutorCmd extends Command(name = "executor", description = "launches ex
     }
   }
 
-  var sandboxActorPath = arg[String](name="sandbox-actor-path", description = "Serialization.serializedActorPath")
+  var sandboxActorPath = opt[Option[String]](name="sandbox-actor-path", description = "Serialization.serializedActorPath")
 
   private val systemTerminated = new AtomicBoolean(false)
 
   private def startAndRegisterExecutorToSandBox: ShutdownHookThread = {
-    val executorSystem = RemoteService.buildRemoteSystem(Address("akka.tcp", SystemName, AddressFromURIString(sandboxActorPath).host.get, 0))
-    executorSystem.actorOf(Props(classOf[SandboxFrontDesk], executorSystem.actorSelection(sandboxActorPath)))
+    require(sandboxActorPath.isDefined, s"Please supply sandbox-actor-path parameter !!!")
+    val executorSystem = RemoteService.buildRemoteSystem(Address("akka.tcp", SystemName, AddressFromURIString(sandboxActorPath.get).host.get, 0))
+    executorSystem.actorOf(Props(classOf[SandboxFrontDesk], executorSystem.actorSelection(sandboxActorPath.get)))
     executorSystem.whenTerminated.onComplete { _ =>
       logger.info("Remote Actor System just shut down, exiting jvm process !!!")
       systemTerminated.set(true)

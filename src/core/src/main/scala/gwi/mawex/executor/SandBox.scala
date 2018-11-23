@@ -20,11 +20,11 @@ sealed trait SandBox extends Actor with ActorLogging {
 /** SandBox for local JVM execution, it just simply forwards Task/Result from Worker to executor */
 class LocalJvmSandBox(executorProps: Props) extends SandBox {
   override def receive: Receive = {
-    case Task(_, job) =>
+    case task: Task =>
       context
         .child(ExecutorCmd.ActorName)
         .getOrElse(context.actorOf(executorProps, ExecutorCmd.ActorName))
-        .forward(job)
+        .forward(task)
   }
 }
 
@@ -37,7 +37,6 @@ class RemoteSandBox(controller: RemoteController, executorCmd: ExecutorCmd) exte
     log.info("Shutting down Remote Actor System !!!")
     frontDeskRef.foreach(_ ! s2e.TerminateExecutor)
     frontDeskRef = Option.empty
-    controller.onStop()
   }
 
   override def supervisorStrategy: OneForOneStrategy = OneForOneStrategy() {
@@ -59,30 +58,30 @@ class RemoteSandBox(controller: RemoteController, executorCmd: ExecutorCmd) exte
   override def receive: Receive = idle
 
   def idle: Receive = {
-    case Task(_, job) =>
-      context.become(awaitingForkRegistration(sender(), job))
-      context.setReceiveTimeout(5.seconds)
-      controller.start(executorCmd.activate(Serialization.serializedActorPath(self))) // TODO  what if this fails ???
+    case task@Task(id, _) =>
+      context.become(awaitingForkRegistration(sender(), task))
+      context.setReceiveTimeout(20.seconds)
+      controller.start(id, executorCmd.activate(Serialization.serializedActorPath(self))) // TODO  what if this fails ???
   }
 
-  def awaitingForkRegistration(worker: ActorRef, job: Any): Receive = {
+  def awaitingForkRegistration(worker: ActorRef, task: Task): Receive = {
     case e2s.RegisterExecutor =>
       val address = sender().path.address
       log.info(s"Forked Executor registered at $address")
       frontDeskRef = Some(sender())
       context.setReceiveTimeout(Duration.Undefined)
       val executorRef = context.actorOf(controller.executorProps.withDeploy(Deploy(scope = RemoteScope(address))), ExecutorCmd.ActorName)
-      executorRef ! job
+      executorRef ! task
       context.become(working(worker, executorRef))
     case ReceiveTimeout =>
-      log.warning("Forked Executor Remote actor system has not registered !!!") // TODO  now what ?
+      log.warning("Forked Executor Remote actor system has not registered !!!") // TODO now what ?
   }
 
   def working(worker: ActorRef, executor: ActorRef): Receive = {
-    case taskExecuted: e2w.TaskExecuted =>
+    case taskResult: TaskResult =>
       executor ! PoisonPill
-      log.warning(s"Executor finished task with result : ${taskExecuted.result}")
-      worker ! taskExecuted
+      log.warning(s"Executor finished task with result : ${taskResult.result}")
+      worker ! taskResult
       shutDownRemoteActorSystem()
       context.become(idle)
   }

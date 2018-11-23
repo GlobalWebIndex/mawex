@@ -5,7 +5,7 @@ import java.nio.file.{Files, Paths}
 
 import akka.actor._
 import com.typesafe.scalalogging.LazyLogging
-import gwi.mawex.{Fork, Launcher}
+import gwi.mawex.{Fork, Launcher, TaskId}
 import io.kubernetes.client.util.Config
 import io.kubernetes.client.apis.BatchV1Api
 
@@ -15,7 +15,7 @@ import scala.util.Try
 trait RemoteController {
   def executorProps: Props
   def executorConf: ExecutorConf
-  def start(executorCmd: ExecutorCmd): Unit
+  def start(taskId: TaskId, executorCmd: ExecutorCmd): Try[Unit]
   def onStop(): Unit
 }
 
@@ -27,7 +27,7 @@ case class ForkingController(executorProps: Props, executorConf: ForkedJvmConf) 
 
   private[this] var process: Option[Process] = Option.empty
 
-  override def start(executorCmd: ExecutorCmd): Unit = Try {
+  override def start(taskId: TaskId, executorCmd: ExecutorCmd): Try[Unit] = Try {
     process =
       Option(
         Fork.run(
@@ -59,9 +59,10 @@ case class ForkingController(executorProps: Props, executorConf: ForkedJvmConf) 
 }
 
 /** Controller starts executor in a k8s job **/
-case class K8JobConf(jobName: String, image: String, namespace: String, serverApiUrl: String, token: String, caCert: String) extends ExecutorConf
+case class K8JobConf(image: String, namespace: String, serverApiUrl: String, token: String, caCert: String) extends ExecutorConf
 case class K8JobController(executorProps: Props, executorConf: K8JobConf) extends RemoteController with K8BatchApiSupport {
 
+  private[this] var jobName: Option[JobName] = Option.empty
   private[this] implicit val batchApi =
     new BatchV1Api(
       Config.fromToken(
@@ -71,9 +72,13 @@ case class K8JobController(executorProps: Props, executorConf: K8JobConf) extend
         .setDebugging(true)
     )
 
-  override def start(executorCmd: ExecutorCmd): Unit = Try(runJob(executorConf, executorCmd))
+  override def start(taskId: TaskId, executorCmd: ExecutorCmd): Try[Unit] = {
+    jobName = Option(JobName(taskId))
+    Try(runJob(JobName(taskId), executorConf, executorCmd))
+  }
 
-  override def onStop(): Unit = Try(deleteJob(executorConf))
+  override def onStop(): Unit =
+    jobName.foreach( jobName => Try(deleteJob(jobName, executorConf)) )
 }
 
 object K8JobConf {
@@ -82,7 +87,7 @@ object K8JobConf {
   private val certPath            = Paths.get(s"$serviceAccountPath/ca.crt")
 
   private def fail(msg: String) = throw new IllegalArgumentException(msg)
-  def apply(jobName: String, image: String, namespace: String): K8JobConf = {
+  def apply(image: String, namespace: String): K8JobConf = {
     val k8sApiHost = sys.env.getOrElse("KUBERNETES_SERVICE_HOST", fail(s"Env var KUBERNETES_SERVICE_HOST is not available !!!"))
     val token =
       if (tokenPath.toFile.exists())
@@ -96,6 +101,6 @@ object K8JobConf {
       else
         fail(s"Cert file $certPath does not exist !!!")
 
-    K8JobConf(jobName, image, namespace, k8sApiHost, token, cert)
+    K8JobConf(image, namespace, k8sApiHost, token, cert)
   }
 }

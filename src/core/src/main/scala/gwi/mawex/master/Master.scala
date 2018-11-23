@@ -59,7 +59,7 @@ class Master(conf: Master.Config) extends PersistentActor with ActorLogging {
       persistAll(tasksById.keys.map(TaskFailed)(breakOut)) { failedEvent =>
         log.warning("Orphan processing task, his worker probably died in battle : {} !!!", failedEvent)
         workState = workState.updated(failedEvent)
-        mediator ! DistributedPubSubMediator.Publish(conf.masterId, TaskResult(tasksById(failedEvent.taskId), Left(s"Orphan progressing task ${failedEvent.taskId} !!!")))
+        mediator ! DistributedPubSubMediator.Publish(conf.masterId, TaskResult(failedEvent.taskId, Left(s"Orphan progressing task ${failedEvent.taskId} !!!")))
       }
   }
 
@@ -75,7 +75,7 @@ class Master(conf: Master.Config) extends PersistentActor with ActorLogging {
           persist(TaskFailed(task.id)) { e =>
             workState = workState.updated(e)
             notifyWorkers()
-            mediator ! DistributedPubSubMediator.Publish(conf.masterId, TaskResult(task, Left(s"Worker $workerId checked out while processing task ${task.id} ...")))
+            mediator ! DistributedPubSubMediator.Publish(conf.masterId, TaskResult(task.id, Left(s"Worker $workerId checked out while processing task ${task.id} ...")))
           }
         }
 
@@ -120,7 +120,7 @@ class Master(conf: Master.Config) extends PersistentActor with ActorLogging {
       workState = workState.updated(e)
       workersById.idle(workerId, task.id)
       notifyWorkers()
-      mediator ! DistributedPubSubMediator.Publish(conf.masterId, TaskResult(task, resultEither))
+      mediator ! DistributedPubSubMediator.Publish(conf.masterId, TaskResult(task.id, resultEither))
       s ! m2w.TaskResultAck(task.id)
     }
   }

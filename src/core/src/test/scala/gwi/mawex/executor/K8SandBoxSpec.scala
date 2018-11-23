@@ -11,7 +11,6 @@ import org.scalatest.{FreeSpecLike, Ignore}
 object K8 {
   val conf =
     K8JobConf(
-      "hello-world",
       "alpine",
       "default",
       "xxx", // cat ~/.kube/config | grep "server: "
@@ -31,11 +30,11 @@ class K8SandBoxSpec extends FreeSpecLike with K8BatchApiSupport {
   private[this] implicit lazy val batchApi = new BatchV1Api(apiClient)
 
   "k8 client should succeed" in {
-    runJob(K8.conf, ExecutorCmd(List("df", "-h"), None))
+    runJob(JobName("job-test"), K8.conf, ExecutorCmd(List("df", "-h"), None))
 
     Thread.sleep(5000)
 
-    deleteJob(K8.conf)
+    deleteJob(JobName("job-test"), K8.conf)
   }
 
 }
@@ -55,11 +54,11 @@ class Fabric8SandBoxSpec extends FreeSpecLike with Fabric8BatchApiSupport {
   implicit lazy val apiClient = new BatchAPIGroupClient(httpClient, config)
 
   "fabricate client should succeed" in {
-    println(runJob(conf, ExecutorCmd(List("df", "-h"), None)))
+    println(runJob(JobName("job-test"), conf, ExecutorCmd(List("df", "-h"), None)))
 
     Thread.sleep(5000)
 
-    println(deleteJob(conf))
+    println(deleteJob(JobName("job-test"), conf))
   }
 
 }

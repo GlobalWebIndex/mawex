@@ -37,6 +37,7 @@ class RemoteSandBox(controller: RemoteController, executorCmd: ExecutorCmd) exte
     log.info("Shutting down Remote Actor System !!!")
     frontDeskRef.foreach(_ ! s2e.TerminateExecutor)
     frontDeskRef = Option.empty
+    controller.onStop()
   }
 
   override def supervisorStrategy: OneForOneStrategy = OneForOneStrategy() {
@@ -61,7 +62,7 @@ class RemoteSandBox(controller: RemoteController, executorCmd: ExecutorCmd) exte
     case task@Task(id, _) =>
       context.become(awaitingForkRegistration(sender(), task))
       context.setReceiveTimeout(20.seconds)
-      controller.start(id, executorCmd.activate(Serialization.serializedActorPath(self))) // TODO  what if this fails ???
+      controller.start(id, executorCmd.activate(Serialization.serializedActorPath(self)))
   }
 
   def awaitingForkRegistration(worker: ActorRef, task: Task): Receive = {
@@ -74,7 +75,9 @@ class RemoteSandBox(controller: RemoteController, executorCmd: ExecutorCmd) exte
       executorRef ! task
       context.become(working(worker, executorRef))
     case ReceiveTimeout =>
-      log.warning("Forked Executor Remote actor system has not registered !!!") // TODO now what ?
+      log.warning("Forked Executor Remote actor system has not registered !!!")
+      worker ! TaskResult(task.id, Left(s"Executor did not reply for task ${task.id} ..."))
+      shutDownRemoteActorSystem()
   }
 
   def working(worker: ActorRef, executor: ActorRef): Receive = {

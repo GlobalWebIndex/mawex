@@ -19,7 +19,7 @@ object JobName {
 trait K8BatchApiSupport {
 
   protected[mawex] def runJob(jobName: JobName, conf: K8JobConf, executorCmd: ExecutorCmd)(implicit batchApi: BatchV1Api): V1Job = {
-    val envVarsMap = sys.env ++ executorCmd.jvmOpts.map(opt => Map("JAVA_TOOL_OPTIONS" -> opt) )
+    val envVarsMap = sys.env ++ executorCmd.jvmOpts.map(opt => Map("JAVA_TOOL_OPTIONS" -> opt) ).getOrElse(Map.empty)
     val envVars =
       envVarsMap.foldLeft(List.empty[V1EnvVar]) { case (acc, (k,v)) =>
         new V1EnvVarBuilder().withName(k).withValue(v).build() :: acc
@@ -53,7 +53,7 @@ trait K8BatchApiSupport {
 trait Fabric8BatchApiSupport {
 
   protected[mawex] def runJob(jobName: JobName, conf: K8JobConf, executorCmd: ExecutorCmd)(implicit batchApi: BatchAPIGroupClient): Job = {
-    val envVarsMap = sys.env ++ executorCmd.jvmOpts.map(opt => Map("JAVA_TOOL_OPTIONS" -> opt) )
+    val envVarsMap = sys.env ++ executorCmd.jvmOpts.map(opt => Map("JAVA_TOOL_OPTIONS" -> opt) ).getOrElse(Map.empty)
     val envVars =
       envVarsMap.foldLeft(List.empty[EnvVar]) { case (acc, (k,v)) =>
         new EnvVarBuilder().withName(k).withValue(v).build() :: acc

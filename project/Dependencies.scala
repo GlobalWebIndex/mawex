@@ -22,7 +22,7 @@ object Dependencies {
   lazy val akkaPersistence              = "com.typesafe.akka"             %%    "akka-persistence"                          % akkaVersion
   lazy val akkaPersistenceQuery         = "com.typesafe.akka"             %%    "akka-persistence-query"                    % akkaVersion
   lazy val akkaPersistenceInMemory      = "com.github.dnvriend"           %%    "akka-persistence-inmemory"                 % "2.5.15.1"
-  lazy val akkaKryoSerialization        = "net.globalwebindex"            %%    "akka-kryo-serialization"                   % "0.5.3-SNAPSHOT" // adhoc published before PR is merged https://github.com/romix/akka-kryo-serialization/pull/124
+  lazy val akkaKryoSerialization        = "net.globalwebindex"            %%    "akka-kryo-serialization"                   % "0.5.4" // adhoc published before PR is merged https://github.com/romix/akka-kryo-serialization/pull/124
   lazy val akkaSlf4j                    = "com.typesafe.akka"             %%    "akka-slf4j"                                % akkaVersion
   lazy val akkaTestkit                  = "com.typesafe.akka"             %%    "akka-testkit"                              % akkaVersion             % "test"
 

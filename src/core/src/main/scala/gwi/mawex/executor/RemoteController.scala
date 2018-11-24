@@ -108,6 +108,7 @@ object K8JobConf extends LazyLogging {
 
   def apply(image: String, namespace: String): K8JobConf = {
     val k8sApiHost = sys.env.getOrElse("KUBERNETES_SERVICE_HOST", fail(s"Env var KUBERNETES_SERVICE_HOST is not available !!!"))
+    val k8sApiUrl = s"https://$k8sApiHost"
     val token =
       if (tokenPath.toFile.exists())
         new String(Files.readAllBytes(tokenPath), "UTF-8")
@@ -120,6 +121,6 @@ object K8JobConf extends LazyLogging {
       else
         fail(s"Cert file $certPath does not exist !!!")
 
-    K8JobConf(image, namespace, k8sApiHost, token, cert)
+    K8JobConf(image, namespace, k8sApiUrl, token, cert)
   }
 }

@@ -17,6 +17,7 @@ dynver in ThisBuild ~= (_.replace('+', '-'))
 cancelable in ThisBuild := true
 publishArtifact in ThisBuild := false
 stage in (ThisBuild, Docker) := null
+publishConfiguration in ThisBuild := publishConfiguration.value.withOverwrite(true)
 
 lazy val `mawex-api` = (project in file("src/api"))
   .settings(publishSettings("globalWebIndex", "mawex-api", s3Resolver))

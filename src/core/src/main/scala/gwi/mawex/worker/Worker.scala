@@ -26,8 +26,13 @@ class Worker(masterId: String, clusterClient: ActorRef, workerId: WorkerId, sand
       Restart
   }
 
+  override def preStart(): Unit = {
+    log.info(s"Worker $workerId starting...")
+  }
+
   override def postStop(): Unit = {
     // note that Master is watching for Workers but they would have to be part of the same actor system for it to work
+    log.info(s"Worker $workerId stopping...")
     master_checkMeOut()
     checkinWorker.cancel()
   }
@@ -95,6 +100,6 @@ object Worker {
     }
   }
 
-  protected[mawex] def props(masterId: String, clusterClient: ActorRef, workerId: WorkerId, sandBoxProps: Props, taskTimeout: FiniteDuration, checkinInterval: FiniteDuration = 5.seconds): Props =
+  def props(masterId: String, clusterClient: ActorRef, workerId: WorkerId, sandBoxProps: Props, taskTimeout: FiniteDuration, checkinInterval: FiniteDuration = 5.seconds): Props =
     Props(classOf[Worker], masterId, clusterClient, workerId, sandBoxProps, taskTimeout, checkinInterval)
 }

@@ -2,15 +2,16 @@ package gwi.mawex.worker
 
 import akka.actor.{ActorRef, ActorSystem, Address, AddressFromURIString, Props, RootActorPath}
 import akka.cluster.client.{ClusterClient, ClusterClientSettings}
+import com.typesafe.scalalogging.LazyLogging
 import gwi.mawex.RemoteService.HostAddress
 import gwi.mawex._
 import gwi.mawex.executor.{ExecutorCmd, ForkedJvmConf, K8JobConf, SandBox}
 import org.backuity.clist.{Cli, Command, arg, opt}
 
-import scala.concurrent.{Await, ExecutionContext}
 import scala.concurrent.duration._
+import scala.concurrent.{Await, ExecutionContext}
 
-object WorkerCmd extends Command(name = "workers", description = "launches workers") with ClusterService {
+object WorkerCmd extends Command(name = "workers", description = "launches workers") with ClusterService with LazyLogging {
 
   var consumerGroups      = opt[List[String]](useEnv = true, default = List("default"), description = "sum,add,divide - 3 workers in 3 consumer groups")
   var pod                 = opt[String](useEnv = true, default = "default", description = "Workers within the same pod are executing sequentially")
@@ -46,10 +47,13 @@ object WorkerCmd extends Command(name = "workers", description = "launches worke
 
   private def getSandBoxProps(executorProps: Props, consumerGroup: String) = executorType match {
     case "local" =>
+      logger.info(s"Local mode enabled on worker")
       SandBox.localJvmProps(executorProps)
     case "forked" =>
+      logger.info(s"Forked mode enabled on worker")
       SandBox.forkingProps(executorProps, ForkedJvmConf(forkedJvmClassPath), ExecutorCmd(sandboxJvmOpts))
     case "k8s" =>
+      logger.info(s"K8s mode enabled on worker")
       val k8Image = k8sDockerImage.getOrElse(throw new IllegalArgumentException("k8sDockerImage not specified !!!"))
       SandBox.k8JobProps(executorProps, K8JobConf(k8Image, k8sNamespace), ExecutorCmd(sandboxJvmOpts))
     case x =>

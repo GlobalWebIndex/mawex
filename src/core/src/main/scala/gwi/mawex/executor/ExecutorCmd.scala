@@ -7,8 +7,8 @@ import com.typesafe.scalalogging.LazyLogging
 import gwi.mawex.{MawexService, RemoteService, e2s, s2e}
 import org.backuity.clist.{Command, opt}
 
-import scala.concurrent.{Await, ExecutionContext}
 import scala.concurrent.duration._
+import scala.concurrent.{Await, ExecutionContext}
 import scala.sys.ShutdownHookThread
 
 case class ExecutorCmd(commands: List[String], jvmOpts: Option[String] = None) {
@@ -33,6 +33,7 @@ object ExecutorCmd extends Command(name = "executor", description = "launches ex
 
   private def startAndRegisterExecutorToSandBox: ShutdownHookThread = {
     require(sandboxActorPath.isDefined, s"Please supply sandbox-actor-path parameter !!!")
+    logger.info(s"Starting executor and connecting to ${sandboxActorPath.get}")
     val executorSystem = RemoteService.buildRemoteSystem(Address("akka.tcp", SystemName, AddressFromURIString(sandboxActorPath.get).host.get, 0))
     executorSystem.actorOf(Props(classOf[SandboxFrontDesk], executorSystem.actorSelection(sandboxActorPath.get)))
     executorSystem.whenTerminated.onComplete { _ =>

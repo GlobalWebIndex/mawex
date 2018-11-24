@@ -34,7 +34,7 @@ class LocalJvmSandBox(executorProps: Props) extends SandBox {
 class RemoteSandBox(controller: RemoteController, executorCmd: ExecutorCmd) extends SandBox {
   private[this] var frontDeskRef: Option[ActorRef] = Option.empty
   private[this] def shutDownRemoteActorSystem(): Unit = {
-    log.info("Shutting down Remote Actor System !!!")
+    log.info("Shutting down Remote Executor Actor System !!!")
     frontDeskRef.foreach(_ ! s2e.TerminateExecutor)
     frontDeskRef = Option.empty
     controller.onStop()
@@ -47,8 +47,14 @@ class RemoteSandBox(controller: RemoteController, executorCmd: ExecutorCmd) exte
     case _: Exception                    ⇒ Escalate
   }
 
-  override def preStart(): Unit = context.system.eventStream.subscribe(self, classOf[DisassociatedEvent])
-  override def postStop(): Unit = shutDownRemoteActorSystem()
+  override def preStart(): Unit = {
+    log.info(s"Sandbox starting...")
+    context.system.eventStream.subscribe(self, classOf[DisassociatedEvent])
+  }
+  override def postStop(): Unit = {
+    log.info(s"Sandbox stopping...")
+    shutDownRemoteActorSystem()
+  }
 
   override def unhandled(message: Any): Unit = message match {
     case DisassociatedEvent(local, remote, _) =>

@@ -6,11 +6,11 @@ import java.nio.file.{Files, Paths}
 import akka.actor._
 import com.typesafe.scalalogging.LazyLogging
 import gwi.mawex.{Fork, Launcher, TaskId}
-import io.kubernetes.client.util.Config
 import io.kubernetes.client.apis.BatchV1Api
+import io.kubernetes.client.util.Config
 
 import scala.sys.process.Process
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 trait RemoteController {
   def executorProps: Props
@@ -60,7 +60,7 @@ case class ForkingController(executorProps: Props, executorConf: ForkedJvmConf) 
 
 /** Controller starts executor in a k8s job **/
 case class K8JobConf(image: String, namespace: String, serverApiUrl: String, token: String, caCert: String) extends ExecutorConf
-case class K8JobController(executorProps: Props, executorConf: K8JobConf) extends RemoteController with K8BatchApiSupport {
+case class K8JobController(executorProps: Props, executorConf: K8JobConf) extends RemoteController with K8BatchApiSupport with LazyLogging {
 
   private[this] var jobName: Option[JobName] = Option.empty
   private[this] implicit val batchApi =
@@ -74,19 +74,38 @@ case class K8JobController(executorProps: Props, executorConf: K8JobConf) extend
 
   override def start(taskId: TaskId, executorCmd: ExecutorCmd): Try[Unit] = {
     jobName = Option(JobName(taskId))
-    Try(runJob(JobName(taskId), executorConf, executorCmd))
+    logger.info(s"Starting k8s job ${JobName(taskId).name}")
+    Try(runJob(JobName(taskId), executorConf, executorCmd)) match {
+      case Success(job) =>
+        if (job.getStatus.getSucceeded >= 1)
+          logger.info(s"Job ${JobName(taskId)} successfully started.")
+        else
+          logger.info(s"Job ${JobName(taskId)} started but no pods are alive yet.")
+        Success(())
+      case Failure(ex) =>
+        logger.error(s"Starting job ${JobName(taskId)} failed !!!", ex)
+        Failure(ex)
+    }
   }
 
-  override def onStop(): Unit =
-    jobName.foreach( jobName => Try(deleteJob(jobName, executorConf)) )
+  override def onStop(): Unit = {
+    jobName.foreach { jobName =>
+      logger.info(s"Deleting k8s job $jobName")
+      Try(deleteJob(jobName, executorConf))
+    }
+  }
 }
 
-object K8JobConf {
+object K8JobConf extends LazyLogging {
   private val serviceAccountPath  = "/var/run/secrets/kubernetes.io/serviceaccount"
   private val tokenPath           = Paths.get(s"$serviceAccountPath/token")
   private val certPath            = Paths.get(s"$serviceAccountPath/ca.crt")
 
-  private def fail(msg: String) = throw new IllegalArgumentException(msg)
+  private def fail(msg: String) = {
+    logger.error(msg)
+    throw new IllegalArgumentException(msg)
+  }
+
   def apply(image: String, namespace: String): K8JobConf = {
     val k8sApiHost = sys.env.getOrElse("KUBERNETES_SERVICE_HOST", fail(s"Env var KUBERNETES_SERVICE_HOST is not available !!!"))
     val token =

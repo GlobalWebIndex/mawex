@@ -13,6 +13,7 @@ object K8 {
     K8JobConf(
       "alpine",
       "default",
+      K8Resources("150m", "100Mi", "150m", "100Mi"),
       "xxx", // cat ~/.kube/config | grep "server: "
       "xxx", // cat /run/secrets/kubernetes.io/serviceaccount/token
       "xxx" // new String(Base64.decodeBase64(cat /run/secrets/kubernetes.io/serviceaccount/ca.crt | base64 -w 0)

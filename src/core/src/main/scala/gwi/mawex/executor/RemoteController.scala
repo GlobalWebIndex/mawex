@@ -59,7 +59,6 @@ case class ForkingController(executorProps: Props, executorConf: ForkedJvmConf) 
 }
 
 /** Controller starts executor in a k8s job **/
-case class K8JobConf(image: String, namespace: String, serverApiUrl: String, token: String, caCert: String) extends ExecutorConf
 case class K8JobController(executorProps: Props, executorConf: K8JobConf) extends RemoteController with K8BatchApiSupport with LazyLogging {
 
   private[this] var jobName: Option[JobName] = Option.empty
@@ -96,6 +95,8 @@ case class K8JobController(executorProps: Props, executorConf: K8JobConf) extend
   }
 }
 
+case class K8Resources(limitsCpu: String, limitsMemory: String, requestsCpu: String, requestsMemory: String)
+case class K8JobConf(image: String, namespace: String, k8Resources: K8Resources, serverApiUrl: String, token: String, caCert: String) extends ExecutorConf
 object K8JobConf extends LazyLogging {
   private val serviceAccountPath  = "/var/run/secrets/kubernetes.io/serviceaccount"
   private val tokenPath           = Paths.get(s"$serviceAccountPath/token")
@@ -106,7 +107,7 @@ object K8JobConf extends LazyLogging {
     throw new IllegalArgumentException(msg)
   }
 
-  def apply(image: String, namespace: String): K8JobConf = {
+  def apply(image: String, namespace: String, k8Resources: K8Resources): K8JobConf = {
     val k8sApiHost = sys.env.getOrElse("KUBERNETES_SERVICE_HOST", fail(s"Env var KUBERNETES_SERVICE_HOST is not available !!!"))
     val k8sApiUrl = s"https://$k8sApiHost"
     val token =
@@ -121,6 +122,6 @@ object K8JobConf extends LazyLogging {
       else
         fail(s"Cert file $certPath does not exist !!!")
 
-    K8JobConf(image, namespace, k8sApiUrl, token, cert)
+    K8JobConf(image, namespace, k8Resources, k8sApiUrl, token, cert)
   }
 }

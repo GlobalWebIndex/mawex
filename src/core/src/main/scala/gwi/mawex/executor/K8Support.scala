@@ -7,6 +7,7 @@ import io.fabric8.kubernetes.api.model.batch.{Job, JobBuilder}
 import io.fabric8.kubernetes.api.model.{ContainerBuilder, EnvVar, EnvVarBuilder}
 import io.fabric8.kubernetes.client.BatchAPIGroupClient
 import io.kubernetes.client.apis.BatchV1Api
+import io.kubernetes.client.custom.Quantity
 import io.kubernetes.client.models._
 
 import scala.collection.JavaConverters._
@@ -31,6 +32,12 @@ trait K8BatchApiSupport {
         .withImage(conf.image)
         .withEnv(envVars)
         .withArgs(executorCmd.commands.asJava)
+        .withNewResources()
+          .addToLimits("memory", new Quantity(conf.k8Resources.limitsMemory))
+          .addToLimits("cpu", new Quantity(conf.k8Resources.limitsCpu))
+          .addToRequests("memory", new Quantity(conf.k8Resources.requestsMemory))
+          .addToRequests("cpu", new Quantity(conf.k8Resources.requestsCpu))
+        .endResources()
         .build
 
     val job =
@@ -53,6 +60,7 @@ trait K8BatchApiSupport {
 trait Fabric8BatchApiSupport {
 
   protected[mawex] def runJob(jobName: JobName, conf: K8JobConf, executorCmd: ExecutorCmd)(implicit batchApi: BatchAPIGroupClient): Job = {
+    import io.fabric8.kubernetes.api.model.Quantity
     val envVarsMap = sys.env ++ executorCmd.jvmOpts.map(opt => Map("JAVA_TOOL_OPTIONS" -> opt) ).getOrElse(Map.empty)
     val envVars =
       envVarsMap.foldLeft(List.empty[EnvVar]) { case (acc, (k,v)) =>
@@ -65,6 +73,12 @@ trait Fabric8BatchApiSupport {
         .withImage(conf.image)
         .withEnv(envVars)
         .withCommand(executorCmd.commands.asJava)
+        .withNewResources()
+          .addToLimits("memory", new Quantity(conf.k8Resources.limitsMemory))
+          .addToLimits("cpu", new Quantity(conf.k8Resources.limitsCpu))
+          .addToRequests("memory", new Quantity(conf.k8Resources.requestsMemory))
+          .addToRequests("cpu", new Quantity(conf.k8Resources.requestsCpu))
+        .endResources()
         .build
 
     batchApi.jobs.create(

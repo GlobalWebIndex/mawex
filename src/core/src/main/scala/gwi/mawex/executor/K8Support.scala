@@ -26,9 +26,11 @@ trait K8BatchApiSupport {
         new V1EnvVarBuilder().withName(k).withValue(v).build() :: acc
       }.asJava
 
+    val containerName = conf.image.trim.split('/').last.split(':').head
+
     val container =
       new V1ContainerBuilder(true)
-        .withName("mawex-job")
+        .withName(containerName)
         .withImage(conf.image)
         .withEnv(envVars)
         .withArgs(executorCmd.commands.asJava)
@@ -67,9 +69,11 @@ trait Fabric8BatchApiSupport {
         new EnvVarBuilder().withName(k).withValue(v).build() :: acc
       }.asJava
 
+    val containerName = conf.image.trim.split('/').last.split(':').head
+
     val container =
       new ContainerBuilder(true)
-        .withName("mawex-job")
+        .withName(containerName)
         .withImage(conf.image)
         .withEnv(envVars)
         .withCommand(executorCmd.commands.asJava)

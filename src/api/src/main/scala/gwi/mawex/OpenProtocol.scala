@@ -34,7 +34,7 @@ abstract class MawexCommandBuilder[C <: MawexCommand] extends Command(name = "co
 
 /**
   * MawexCommand is a marker trait for commands passed to executor for execution.
-  * Executor class is provided by user, see [[gwi.mawex.WorkerCmd]]
+  * Executor class is provided by user, see [[gwi.mawex.worker.WorkerCmd]]
   * @note MawexCommand implementations must be case classes that do not hold any state as Command is serialized
   *       because it is passed to a remote actor (instantiated in a forked jvm process) as an argument
   */

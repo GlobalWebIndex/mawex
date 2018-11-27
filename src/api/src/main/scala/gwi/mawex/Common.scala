@@ -1,9 +1,22 @@
 package gwi.mawex
 
+import java.io.{PrintWriter, StringWriter}
+
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.FiniteDuration
 import scala.sys.process.Process
 import scala.util.{Failure, Success, Try}
+
+object Common {
+  implicit class ThrowablePimp(underlying: Throwable) {
+    def messageWithStackTraceToString: String = {
+      val sw = new StringWriter
+      val pw = new PrintWriter(sw)
+      underlying.printStackTrace(pw)
+      s"${underlying.getMessage}\n${sw.toString}"
+    }
+  }
+}
 
 /**
   * Mawex task execution can be forked which is the recommended way for bigger, long running or memory consuming jobs

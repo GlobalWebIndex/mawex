@@ -8,6 +8,7 @@ import gwi.mawex.executor.SandBox
 
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
+import Common.ThrowablePimp
 
 class Worker(masterId: String, clusterClient: ActorRef, workerId: WorkerId, sandBoxProps: Props, taskTimeout: FiniteDuration, checkinInterval: FiniteDuration) extends Actor with ActorLogging {
   import context.dispatcher
@@ -22,7 +23,7 @@ class Worker(masterId: String, clusterClient: ActorRef, workerId: WorkerId, sand
     case _: DeathPactException           => Stop
     case ex: Exception =>
       log.error(ex, "Executor crashed !!!")
-      currentTaskId.foreach(master_finishTask(_, Left(s"Executor crashed, ${ex.getMessage}")))
+      currentTaskId.foreach(master_finishTask(_, Left(s"Executor crashed, ${ex.messageWithStackTraceToString}")))
       Restart
   }
 
@@ -96,7 +97,7 @@ object Worker {
   implicit def tryToEither[A](obj: Try[A]): Either[String, A] = {
     obj match {
       case Success(something) => Right(something)
-      case Failure(err) => Left(err.getMessage)
+      case Failure(err) => Left(err.messageWithStackTraceToString)
     }
   }
 

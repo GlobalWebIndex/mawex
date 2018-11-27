@@ -2,7 +2,7 @@ package gwi.mawex.executor
 
 import akka.actor.SupervisorStrategy.{Escalate, Stop}
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorLogging, ActorRef, DeathPactException, Deploy, OneForOneStrategy, PoisonPill, Props, ReceiveTimeout}
-import akka.remote.{DisassociatedEvent, RemoteScope}
+import akka.remote.{DisassociatedEvent, RemoteScope, RemotingErrorEvent}
 import akka.serialization.Serialization
 import gwi.mawex._
 
@@ -50,6 +50,7 @@ class RemoteSandBox(controller: RemoteController, executorCmd: ExecutorCmd) exte
   override def preStart(): Unit = {
     log.info(s"Sandbox starting...")
     context.system.eventStream.subscribe(self, classOf[DisassociatedEvent])
+    context.system.eventStream.subscribe(self, classOf[RemotingErrorEvent])
   }
   override def postStop(): Unit = {
     log.info(s"Sandbox stopping...")
@@ -60,6 +61,8 @@ class RemoteSandBox(controller: RemoteController, executorCmd: ExecutorCmd) exte
     case DisassociatedEvent(local, remote, _) =>
       log.info(s"Forked executor system $remote disassociated from $local ...")
       shutDownRemoteActorSystem()
+    case RemotingErrorEvent(ex) =>
+      log.error(ex, s"Connection with Executor has error")
     case x => super.unhandled(x)
   }
 

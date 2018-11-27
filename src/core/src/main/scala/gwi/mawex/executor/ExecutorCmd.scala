@@ -2,7 +2,8 @@ package gwi.mawex.executor
 
 import java.util.concurrent.atomic.AtomicBoolean
 
-import akka.actor.{Actor, ActorSelection, Address, AddressFromURIString, Props}
+import akka.actor.{Actor, ActorLogging, ActorSelection, Address, AddressFromURIString, Props}
+import akka.remote.{DisassociatedEvent, RemotingErrorEvent}
 import com.typesafe.scalalogging.LazyLogging
 import gwi.mawex.{MawexService, RemoteService, e2s, s2e}
 import org.backuity.clist.{Command, opt}
@@ -20,10 +21,23 @@ object ExecutorCmd extends Command(name = "executor", description = "launches ex
   val ActorName   = "Executor"
   val SystemName  = "ExecutorSystem"
 
-  class SandboxFrontDesk(sandbox: ActorSelection) extends Actor {
-    override def preStart(): Unit = sandbox ! e2s.RegisterExecutor
+  class SandboxFrontDesk(sandbox: ActorSelection) extends Actor with ActorLogging {
+    override def preStart(): Unit = {
+      log.info(s"SandboxFrontDesk starting...")
+      context.system.eventStream.subscribe(self, classOf[DisassociatedEvent])
+      context.system.eventStream.subscribe(self, classOf[RemotingErrorEvent])
+      sandbox ! e2s.RegisterExecutor
+    }
     override def receive: Receive = {
       case s2e.TerminateExecutor => context.system.terminate()
+    }
+    override def unhandled(message: Any): Unit = message match {
+      case DisassociatedEvent(local, remote, _) =>
+        log.info(s"Sandbox system $remote disassociated from $local ...")
+        context.system.terminate()
+      case RemotingErrorEvent(ex) =>
+        log.error(ex, s"Connection with Sandbox has error")
+      case x => super.unhandled(x)
     }
   }
 

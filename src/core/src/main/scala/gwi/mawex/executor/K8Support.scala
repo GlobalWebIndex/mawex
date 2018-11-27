@@ -47,7 +47,9 @@ trait K8BatchApiSupport extends LazyLogging {
       new V1JobBuilder(true)
         .withNewMetadata.withName(jobName.name)
         .withNamespace(conf.namespace).and
-        .withNewSpec().withNewTemplate().withNewSpec().withContainers(container).withRestartPolicy("Never").and.and.and
+        .withNewSpec()
+          .withActiveDeadlineSeconds(3600L)
+          .withNewTemplate().withNewSpec().withContainers(container).withRestartPolicy("Never").and.and.and
         .build
 
     logger.info(s"Creating job ${jobName.name} with container name $containerName")
@@ -91,7 +93,9 @@ trait Fabric8BatchApiSupport {
     batchApi.jobs.create(
       new JobBuilder(true)
         .withNewMetadata.withName(jobName.name).withNamespace(conf.namespace).endMetadata()
-        .withNewSpec().withNewTemplate().withNewSpec().withContainers(container).withRestartPolicy("Never").endSpec().endTemplate().endSpec()
+        .withNewSpec()
+          .withActiveDeadlineSeconds(3600L)
+          .withNewTemplate().withNewSpec().withContainers(container).withRestartPolicy("Never").endSpec().endTemplate().endSpec()
         .build
     )
 

@@ -90,7 +90,14 @@ case class K8JobController(executorProps: Props, executorConf: K8JobConf) extend
   override def onStop(): Unit = {
     jobName.foreach { jobName =>
       logger.info(s"Deleting k8s job $jobName")
-      Try(deleteJob(jobName, executorConf))
+      Try(deleteJob(jobName, executorConf)) match {
+        case Success(status) =>
+          logger.info(s"Job $jobName successfully deleted, status: \n$status")
+          Success(status)
+        case Failure(ex) =>
+          logger.error(s"Deleting job $jobName failed !!!", ex)
+          Failure(ex)
+      }
     }
   }
 }

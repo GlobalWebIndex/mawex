@@ -58,7 +58,6 @@ trait K8BatchApiSupport extends LazyLogging {
 
   protected[mawex] def deleteJob(jobName: JobName, k8JobConf: K8JobConf)(implicit batchApi: BatchV1Api): V1Status = {
     val opts = new V1DeleteOptionsBuilder().withPropagationPolicy("Background").build()
-    logger.info(s"Deleting job ${jobName.name}")
     batchApi.deleteNamespacedJob(jobName.name, k8JobConf.namespace, opts, "false", 5, false, "Background")
   }
 

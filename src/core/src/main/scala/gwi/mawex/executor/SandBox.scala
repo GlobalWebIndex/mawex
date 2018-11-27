@@ -88,6 +88,7 @@ class RemoteSandBox(controller: RemoteController, executorCmd: ExecutorCmd) exte
       log.warning("Forked Executor Remote actor system has not registered !!!")
       worker ! TaskResult(task.id, Left(s"Executor did not reply for task ${task.id} ..."))
       shutDownRemoteActorSystem()
+      context.become(idle)
   }
 
   def working(worker: ActorRef, executor: ActorRef): Receive = {

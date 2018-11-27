@@ -59,6 +59,7 @@ class RemoteSandBox(controller: RemoteController, executorCmd: ExecutorCmd) exte
   override def unhandled(message: Any): Unit = message match {
     case DisassociatedEvent(local, remote, _) =>
       log.info(s"Forked executor system $remote disassociated from $local ...")
+      shutDownRemoteActorSystem()
     case x => super.unhandled(x)
   }
 

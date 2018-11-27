@@ -93,7 +93,7 @@ class RemoteSandBox(controller: RemoteController, executorCmd: ExecutorCmd) exte
   def working(worker: ActorRef, executor: ActorRef): Receive = {
     case taskResult: TaskResult =>
       executor ! PoisonPill
-      log.warning(s"Executor finished task with result : ${taskResult.result}")
+      log.info(s"Executor finished task with result : ${taskResult.result}")
       worker ! taskResult
       shutDownRemoteActorSystem()
       context.become(idle)

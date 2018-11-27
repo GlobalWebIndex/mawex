@@ -18,14 +18,15 @@ object WorkerCmd extends Command(name = "workers", description = "launches worke
   var masterId                      = opt[String](useEnv = true, default = "master", name="master-id")
   var taskTimeout                   = opt[Int](useEnv = true, default = 60*60, description = "timeout for a task in seconds")
   var executorType                  = opt[String](useEnv = true, default = "forked", name = "executor-type", description = "local / forked / k8s")
-  var executorResourcesLimitsCpu    = opt[String](useEnv = true, default = "150m", name = "executor-resources-limits-cpu", description = "k8s resource limits")
-  var executorResourcesLimitsMem    = opt[String](useEnv = true, default = "100Mi", name = "executor-resources-limits-memory", description = "k8s resource limits")
-  var executorResourcesRequestsCpu  = opt[String](useEnv = true, default = "50m", name = "executor-resources-requests-cpu", description = "k8s resource limits")
-  var executorResourcesRequestsMem  = opt[String](useEnv = true, default = "100Mi", name = "executor-resources-requests-memory", description = "k8s resource limits")
   var sandboxJvmOpts                = opt[Option[String]](useEnv = true, name = "sandbox-jvm-opts", description = "Whether to execute task in a forked process and with what JVM options")
   var forkedJvmClassPath            = opt[String](useEnv = true, default = "lib/*", name = "forked-jvm-class-path", description = "Class path for the fork jvm executor")
   var k8sNamespace                  = opt[String](useEnv = true, default = "default", name = "k8s-namespace", description = "What namespace to execute k8s jobs at")
   var k8sDockerImage                = opt[Option[String]](useEnv = true, name = "k8s-docker-image", description = "What docker image to run job with")
+  var k8sResourcesLimitsCpu         = opt[String](useEnv = true, default = "150m", name = "k8s-resources-limits-cpu", description = "k8s resource limits")
+  var k8sResourcesLimitsMem         = opt[String](useEnv = true, default = "100Mi", name = "k8s-resources-limits-memory", description = "k8s resource limits")
+  var k8sResourcesRequestsCpu       = opt[String](useEnv = true, default = "50m", name = "k8s-resources-requests-cpu", description = "k8s resource limits")
+  var k8sResourcesRequestsMem       = opt[String](useEnv = true, default = "100Mi", name = "k8s-resources-requests-memory", description = "k8s resource limits")
+  var k8sClientDebugMode            = opt[Boolean](useEnv = true, default = false, name = "k8s-client-debug-mode", description = "k8s client debug mode")
   var executorClass                 = arg[String](name="executor-class", description = "Full class name of executor Actor")
   var commandBuilderClass           = arg[Option[String]](required = false, name="command-builder-class", description = "Full class name of MawexCommandBuilder")
   var commandBuilderArgs            = arg[Option[String]](required = false, name="command-args", description = "Arguments to be passed to MawexCommandBuilder")
@@ -33,10 +34,10 @@ object WorkerCmd extends Command(name = "workers", description = "launches worke
 
   private def getExecutorResources =
     K8Resources(
-      executorResourcesLimitsCpu,
-      executorResourcesLimitsMem,
-      executorResourcesRequestsCpu,
-      executorResourcesRequestsMem
+      k8sResourcesLimitsCpu,
+      k8sResourcesLimitsMem,
+      k8sResourcesRequestsCpu,
+      k8sResourcesRequestsMem
     )
 
   private def workerActorRef(masterId: String, clusterClient: ActorRef, workerId: WorkerId, taskTimeout: FiniteDuration, sandBoxProps: Props, system: ActorSystem): ActorRef =
@@ -68,7 +69,7 @@ object WorkerCmd extends Command(name = "workers", description = "launches worke
     case "k8s" =>
       logger.info(s"K8s mode enabled on worker")
       val k8Image = k8sDockerImage.getOrElse(throw new IllegalArgumentException("k8sDockerImage not specified !!!"))
-      SandBox.k8JobProps(executorProps, K8JobConf(k8Image, k8sNamespace, getExecutorResources), ExecutorCmd(sandboxJvmOpts))
+      SandBox.k8JobProps(executorProps, K8JobConf(k8Image, k8sNamespace, getExecutorResources, k8sClientDebugMode), ExecutorCmd(sandboxJvmOpts))
     case x =>
       throw new IllegalArgumentException(s"Executor type $x is not valid, please choose between local / forked / k8s")
   }

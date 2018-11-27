@@ -14,6 +14,7 @@ object K8 {
       "alpine",
       "default",
       K8Resources("150m", "100Mi", "150m", "100Mi"),
+      false,
       "xxx", // cat ~/.kube/config | grep "server: "
       "xxx", // cat /run/secrets/kubernetes.io/serviceaccount/token
       "xxx" // new String(Base64.decodeBase64(cat /run/secrets/kubernetes.io/serviceaccount/ca.crt | base64 -w 0)
@@ -26,7 +27,7 @@ class K8SandBoxSpec extends FreeSpecLike with K8BatchApiSupport {
     Config.fromToken(
       K8.conf.serverApiUrl,
       K8.conf.token,
-    ).setSslCaCert(new ByteArrayInputStream(K8.conf.caCert.getBytes())).setDebugging(true)
+    ).setSslCaCert(new ByteArrayInputStream(K8.conf.caCert.getBytes())).setDebugging(K8.conf.debug)
 
   private[this] implicit lazy val batchApi = new BatchV1Api(apiClient)
 

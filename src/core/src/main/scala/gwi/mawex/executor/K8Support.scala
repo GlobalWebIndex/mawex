@@ -2,6 +2,7 @@ package gwi.mawex.executor
 
 import java.lang
 
+import com.typesafe.scalalogging.LazyLogging
 import gwi.mawex.TaskId
 import io.fabric8.kubernetes.api.model.batch.{Job, JobBuilder}
 import io.fabric8.kubernetes.api.model.{ContainerBuilder, EnvVar, EnvVarBuilder}
@@ -17,7 +18,7 @@ object JobName {
   def apply(taskId: TaskId): JobName = JobName(taskId.id)
 }
 
-trait K8BatchApiSupport {
+trait K8BatchApiSupport extends LazyLogging {
 
   protected[mawex] def runJob(jobName: JobName, conf: K8JobConf, executorCmd: ExecutorCmd)(implicit batchApi: BatchV1Api): V1Job = {
     val envVarsMap = sys.env ++ executorCmd.jvmOpts.map(opt => Map("JAVA_TOOL_OPTIONS" -> opt) ).getOrElse(Map.empty)
@@ -49,11 +50,13 @@ trait K8BatchApiSupport {
         .withNewSpec().withNewTemplate().withNewSpec().withContainers(container).withRestartPolicy("Never").and.and.and
         .build
 
+    logger.info(s"Creating job ${jobName.name} with container name $containerName")
     batchApi.createNamespacedJob(conf.namespace, job, "true")
   }
 
   protected[mawex] def deleteJob(jobName: JobName, k8JobConf: K8JobConf)(implicit batchApi: BatchV1Api): V1Status = {
     val opts = new V1DeleteOptionsBuilder().withPropagationPolicy("Background").build()
+    logger.info(s"Deleting job ${jobName.name}")
     batchApi.deleteNamespacedJob(jobName.name, k8JobConf.namespace, opts, "false", 5, false, "Background")
   }
 

@@ -54,16 +54,16 @@
 
 
 ^^ Executor
-  +-------------------------------+
-  |SandBox (current/forked JVM/k8s|
-  | +---------------------------+ |
-  | |Executor                   | |
-  | | +-----------------------+ | |
-  | | |Command                | | |
-  | | |     Business logic    | | |
-  | | +-----------------------+ | |
-  | +---------------------------+ |
-  +-------------------------------+
+  +-----------------------------------+
+  |SandBox (current-jvm/forked-jvm/k8s|
+  | +-------------------------------+ |
+  | |Executor                       | |
+  | | +---------------------------+ | |
+  | | |Command                    | | |
+  | | |     Business logic        | | |
+  | | +---------------------------+ | |
+  | +-------------------------------+ |
+  +-----------------------------------+
 ```
 
 Lightweight library for distributed task scheduling based on Master Worker Executor model.
@@ -98,12 +98,11 @@ if you run a lot of microservices.
 This system was designed for an ETL pipeline orchestrated by [saturator](https://github.com/GlobalWebIndex/saturator)
 which is a FSM that sees pipeline as layered DAG and saturates/satisfies dependencies by executing ETL tasks on Mawex.
 
-### mawex in action :
+### mawex persistence and clustering details :
 
-Mawex akka persistence is tested [akka-persistence-dynamodb](https://github.com/akka/akka-persistence-dynamodb) and redis plugin
+Mawex akka persistence is tested with [akka-persistence-dynamodb](https://github.com/akka/akka-persistence-dynamodb) and redis plugin
 but running it on different storages like cassandra is just a matter of configuration changes, choose a storage based on
-amount and throughput of tasks that are being submitted to it in which case something like cassandra would be a better fit.
-It uses Kryo serialization because event log is persisted only temporarily and it would be deleted on new deploy.
+amount and throughput of tasks that are being submitted to it.
 By default it uses the Oldest node auto-downing strategy for split-brain cases because the cluster is solely about Singleton with actor residing on the oldest node.
 
 ### Production cluster behavior
@@ -112,6 +111,18 @@ When you deploy a cluster of Master and Worker nodes, you are free to stop/start
 and tasks would be pending until corresponding Worker shows up. This is good for deployment purposes because Workers are being developed continually
 and you can ship them without restarting whole cluster, even if you don't have redundant workers, task would wait in Master until corresponding Worker asks for it.
 
+### Sandboxing
+
+Actual jobs should be executed in isolated environment or cloud and never affect runtime of the actual Worker, there are three implementations :
+    - local-jvm
+        - task is executed within the current jvm process
+        - recommended for lightweight tasks with simple computation, nothing with high memory requirements or cpu heavy
+    - forked-jvm
+        - task is executed within forked jvm process
+        - recommended for heavy tasks as the worker jvm process is not directly affected
+    - k8s job
+        - task is executed as Kubernetes Job
+        - recommended for heavy tasks
 
 ### Example setup
 

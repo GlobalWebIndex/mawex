@@ -12,6 +12,7 @@ import io.kubernetes.client.custom.Quantity
 import io.kubernetes.client.models._
 
 import scala.collection.JavaConverters._
+import scala.util.{Failure, Success, Try}
 
 case class JobName(name: String)
 object JobName {
@@ -19,6 +20,9 @@ object JobName {
 }
 
 trait K8BatchApiSupport extends LazyLogging {
+
+  protected[mawex] def getJobStatusConditions(job: V1Job): String =
+    Option(job.getStatus.getConditions).map(_.asScala.map( c => s"${c.getType} ${c.getStatus}").mkString("\n","\n","\n")).getOrElse("")
 
   protected[mawex] def runJob(jobName: JobName, conf: K8JobConf, executorCmd: ExecutorCmd)(implicit batchApi: BatchV1Api): V1Job = {
     val envVarsMap = sys.env ++ executorCmd.jvmOpts.map(opt => Map("JAVA_TOOL_OPTIONS" -> opt) ).getOrElse(Map.empty)
@@ -54,6 +58,17 @@ trait K8BatchApiSupport extends LazyLogging {
 
     logger.info(s"Creating job ${jobName.name} with container name $containerName")
     batchApi.createNamespacedJob(conf.namespace, job, "true")
+  }
+
+  protected[mawex] def jobExists(jobName: JobName, conf: K8JobConf)(implicit batchApi: BatchV1Api): Boolean = {
+    Try(batchApi.readNamespacedJobStatusWithHttpInfo(jobName.name, conf.namespace, "true")) match {
+      case Failure(ex) =>
+        logger.error(s"Checking job exists failed !!!", ex)
+        false
+      case Success(response) =>
+        logger.info(s"Checking job exists ${getJobStatusConditions(response.getData)}")
+        response.getStatusCode != 404
+    }
   }
 
   protected[mawex] def deleteJob(jobName: JobName, k8JobConf: K8JobConf)(implicit batchApi: BatchV1Api): V1Status = {

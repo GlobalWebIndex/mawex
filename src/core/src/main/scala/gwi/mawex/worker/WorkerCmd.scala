@@ -19,6 +19,8 @@ object WorkerCmd extends Command(name = "workers", description = "launches worke
   var taskTimeout                   = opt[Int](useEnv = true, default = 60*60, description = "timeout for a task in seconds")
   var executorType                  = opt[String](useEnv = true, default = "forked", name = "executor-type", description = "local / forked / k8s")
   var sandboxJvmOpts                = opt[Option[String]](useEnv = true, name = "sandbox-jvm-opts", description = "Whether to execute task in a forked process and with what JVM options")
+  var sandboxCheckInterval          = opt[Int](useEnv = true, default = 2*60, name = "sandbox-check-interval", description = "Interval in seconds of checking for jobs spawned in sandbox")
+  var sandboxCheckLimit             = opt[Int](useEnv = true, default = 15, name = "sandbox-check-limit", description = "How many times to check whether job spawned in sandbox is alive")
   var forkedJvmClassPath            = opt[String](useEnv = true, default = "lib/*", name = "forked-jvm-class-path", description = "Class path for the fork jvm executor")
   var k8sNamespace                  = opt[String](useEnv = true, default = "default", name = "k8s-namespace", description = "What namespace to execute k8s jobs at")
   var k8sDockerImage                = opt[Option[String]](useEnv = true, name = "k8s-docker-image", description = "What docker image to run job with")
@@ -65,11 +67,11 @@ object WorkerCmd extends Command(name = "workers", description = "launches worke
       SandBox.localJvmProps(executorProps)
     case "forked" =>
       logger.info(s"Forked mode enabled on worker")
-      SandBox.forkingProps(executorProps, ForkedJvmConf(forkedJvmClassPath), ExecutorCmd(sandboxJvmOpts))
+      SandBox.forkingProps(executorProps, ForkedJvmConf(forkedJvmClassPath, sandboxCheckInterval.seconds, sandboxCheckLimit), ExecutorCmd(sandboxJvmOpts))
     case "k8s" =>
       logger.info(s"K8s mode enabled on worker")
       val k8Image = k8sDockerImage.getOrElse(throw new IllegalArgumentException("k8sDockerImage not specified !!!"))
-      SandBox.k8JobProps(executorProps, K8JobConf(k8Image, k8sNamespace, getExecutorResources, k8sClientDebugMode), ExecutorCmd(sandboxJvmOpts))
+      SandBox.k8JobProps(executorProps, K8JobConf(k8Image, k8sNamespace, getExecutorResources, k8sClientDebugMode, sandboxCheckInterval.seconds, sandboxCheckLimit), ExecutorCmd(sandboxJvmOpts))
     case x =>
       throw new IllegalArgumentException(s"Executor type $x is not valid, please choose between local / forked / k8s")
   }

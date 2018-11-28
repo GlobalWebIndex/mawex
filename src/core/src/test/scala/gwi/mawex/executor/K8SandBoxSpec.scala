@@ -1,7 +1,7 @@
 package gwi.mawex.executor
 
 import java.io.ByteArrayInputStream
-
+import scala.concurrent.duration._
 import io.fabric8.kubernetes.client.{BatchAPIGroupClient, ConfigBuilder}
 import io.kubernetes.client.apis.BatchV1Api
 import io.kubernetes.client.util.Config
@@ -15,6 +15,8 @@ object K8 {
       "default",
       K8Resources("150m", "100Mi", "150m", "100Mi"),
       false,
+      1.minute,
+      1,
       "xxx", // cat ~/.kube/config | grep "server: "
       "xxx", // cat /run/secrets/kubernetes.io/serviceaccount/token
       "xxx" // new String(Base64.decodeBase64(cat /run/secrets/kubernetes.io/serviceaccount/ca.crt | base64 -w 0)

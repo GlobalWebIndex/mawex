@@ -9,6 +9,7 @@ import gwi.mawex.{Fork, Launcher, TaskId}
 import io.kubernetes.client.apis.BatchV1Api
 import io.kubernetes.client.util.Config
 
+import scala.concurrent.duration.FiniteDuration
 import scala.sys.process.Process
 import scala.util.{Failure, Success, Try}
 
@@ -16,13 +17,17 @@ trait RemoteController {
   def executorProps: Props
   def executorConf: ExecutorConf
   def start(taskId: TaskId, executorCmd: ExecutorCmd): Try[Unit]
+  def isRunning: Boolean
   def onStop(): Unit
 }
 
-trait ExecutorConf
+trait ExecutorConf {
+  def checkInterval: FiniteDuration
+  def checkLimit: Int
+}
 
 /** Controller starts executor in a forked JVM process **/
-case class ForkedJvmConf(classPath: String) extends ExecutorConf
+case class ForkedJvmConf(classPath: String, checkInterval: FiniteDuration, checkLimit: Int) extends ExecutorConf
 case class ForkingController(executorProps: Props, executorConf: ForkedJvmConf) extends RemoteController with LazyLogging {
 
   private[this] var process: Option[Process] = Option.empty
@@ -39,17 +44,18 @@ case class ForkingController(executorProps: Props, executorConf: ForkedJvmConf) 
       )
   }
 
+  override def isRunning: Boolean = process.exists(_.isAlive())
+
   override def onStop(): Unit = Try {
-    (1 to 3).foldLeft(process.exists(_.isAlive())) {
+    (1 to 3).foldLeft(isRunning) {
       case (acc, counter) if acc =>
         logger.info("JVM process is still alive, waiting a second ...")
         Thread.sleep(500)
-        val stillAlive = process.exists(_.isAlive())
-        if (counter == 3 && stillAlive) {
+        if (counter == 3 && isRunning) {
           logger.info("JVM process did not die, destroying ...")
           process.foreach(p => Try(p.destroy()))
         }
-        stillAlive
+        isRunning
       case _ =>
         false
     }
@@ -58,10 +64,14 @@ case class ForkingController(executorProps: Props, executorConf: ForkedJvmConf) 
 
 }
 
+
 /** Controller starts executor in a k8s job **/
+case class JobCreationAttempts(jobName: JobName, attempts: Set[Long]) {
+  def addAttempt: JobCreationAttempts = copy(attempts = attempts + System.currentTimeMillis())
+}
 case class K8JobController(executorProps: Props, executorConf: K8JobConf) extends RemoteController with K8BatchApiSupport with LazyLogging {
 
-  private[this] var jobName: Option[JobName] = Option.empty
+  private[this] var jobsWithAttemptsOpt: Option[JobCreationAttempts] = Option.empty
   private[this] implicit val batchApi =
     new BatchV1Api(
       Config.fromToken(
@@ -72,14 +82,11 @@ case class K8JobController(executorProps: Props, executorConf: K8JobConf) extend
     )
 
   override def start(taskId: TaskId, executorCmd: ExecutorCmd): Try[Unit] = {
-    jobName = Option(JobName(taskId))
     logger.info(s"Starting k8s job ${JobName(taskId).name}")
     Try(runJob(JobName(taskId), executorConf, executorCmd)) match {
       case Success(job) =>
-        if (job.getStatus.getSucceeded >= 1)
-          logger.info(s"Job ${JobName(taskId)} successfully started.")
-        else
-          logger.info(s"Job ${JobName(taskId)} started but no pods are alive yet.")
+        logger.info(s"Job ${JobName(taskId)} successfully started ${getJobStatusConditions(job)}")
+        jobsWithAttemptsOpt = Option(JobCreationAttempts(JobName(taskId), Set.empty))
         Success(())
       case Failure(ex) =>
         logger.error(s"Starting job ${JobName(taskId)} failed !!!", ex)
@@ -87,8 +94,18 @@ case class K8JobController(executorProps: Props, executorConf: K8JobConf) extend
     }
   }
 
+  override def isRunning: Boolean = {
+    jobsWithAttemptsOpt.exists {
+      case JobCreationAttempts(jobName, attempts) if attempts.size <= executorConf.checkLimit =>
+        jobsWithAttemptsOpt = jobsWithAttemptsOpt.map(_.addAttempt)
+        jobExists(jobName, executorConf)
+      case _ =>
+        false
+    }
+  }
+
   override def onStop(): Unit = {
-    jobName.foreach { jobName =>
+    jobsWithAttemptsOpt.foreach { case JobCreationAttempts(jobName, _) =>
       logger.info(s"Deleting k8s job $jobName")
       Try(deleteJob(jobName, executorConf)) match {
         case Success(status) =>
@@ -103,7 +120,7 @@ case class K8JobController(executorProps: Props, executorConf: K8JobConf) extend
 }
 
 case class K8Resources(limitsCpu: String, limitsMemory: String, requestsCpu: String, requestsMemory: String)
-case class K8JobConf(image: String, namespace: String, k8Resources: K8Resources, debug: Boolean, serverApiUrl: String, token: String, caCert: String) extends ExecutorConf
+case class K8JobConf(image: String, namespace: String, k8Resources: K8Resources, debug: Boolean, checkInterval: FiniteDuration, checkLimit: Int, serverApiUrl: String, token: String, caCert: String) extends ExecutorConf
 object K8JobConf extends LazyLogging {
   private val serviceAccountPath  = "/var/run/secrets/kubernetes.io/serviceaccount"
   private val tokenPath           = Paths.get(s"$serviceAccountPath/token")
@@ -114,7 +131,7 @@ object K8JobConf extends LazyLogging {
     throw new IllegalArgumentException(msg)
   }
 
-  def apply(image: String, namespace: String, k8Resources: K8Resources, debug: Boolean): K8JobConf = {
+  def apply(image: String, namespace: String, k8Resources: K8Resources, debug: Boolean, checkInterval: FiniteDuration, checkLimit: Int): K8JobConf = {
     val k8sApiHost = sys.env.getOrElse("KUBERNETES_SERVICE_HOST", fail(s"Env var KUBERNETES_SERVICE_HOST is not available !!!"))
     val k8sApiUrl = s"https://$k8sApiHost"
     val token =
@@ -129,6 +146,6 @@ object K8JobConf extends LazyLogging {
       else
         fail(s"Cert file $certPath does not exist !!!")
 
-    K8JobConf(image, namespace, k8Resources, debug, k8sApiUrl, token, cert)
+    K8JobConf(image, namespace, k8Resources, debug, checkInterval, checkLimit, k8sApiUrl, token, cert)
   }
 }

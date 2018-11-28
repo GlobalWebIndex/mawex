@@ -71,7 +71,7 @@ class RemoteSandBox(controller: RemoteController, executorCmd: ExecutorCmd) exte
   def idle: Receive = {
     case task@Task(id, _) =>
       context.become(awaitingForkRegistration(sender(), task))
-      context.setReceiveTimeout(20.seconds)
+      context.setReceiveTimeout(15.seconds)
       controller.start(id, executorCmd.activate(Serialization.serializedActorPath(self)))
   }
 
@@ -85,10 +85,15 @@ class RemoteSandBox(controller: RemoteController, executorCmd: ExecutorCmd) exte
       executorRef ! task
       context.become(working(worker, executorRef))
     case ReceiveTimeout =>
-      log.warning("Forked Executor Remote actor system has not registered !!!")
-      worker ! TaskResult(task.id, Left(s"Executor did not reply for task ${task.id} ..."))
-      shutDownRemoteActorSystem()
-      context.become(idle)
+      if (controller.isRunning) {
+        log.info("Forked Executor Remote actor system has not registered, waiting ...")
+        context.setReceiveTimeout(controller.executorConf.checkInterval)
+      } else {
+        log.warning("Forked Executor Remote actor system has not registered !!!")
+        context.become(idle)
+        worker ! TaskResult(task.id, Left(s"Executor did not reply for task ${task.id} ..."))
+        shutDownRemoteActorSystem()
+      }
   }
 
   def working(worker: ActorRef, executor: ActorRef): Receive = {

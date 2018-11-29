@@ -66,8 +66,9 @@ trait K8BatchApiSupport extends LazyLogging {
         logger.error(s"Checking job exists failed !!!", ex)
         false
       case Success(response) =>
-        logger.info(s"Checking job exists ${getJobStatusConditions(response.getData)}")
-        response.getStatusCode != 404
+        val jobExists = response.getStatusCode != 404
+        logger.info(s"Job exists : $jobExists ${getJobStatusConditions(response.getData)}")
+        jobExists
     }
   }
 

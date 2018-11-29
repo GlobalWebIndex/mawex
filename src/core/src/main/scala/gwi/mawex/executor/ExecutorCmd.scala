@@ -50,19 +50,24 @@ class SandboxFrontDesk(sandbox: ActorSelection) extends Actor with ActorLogging 
 
   def awaitingExecutorRegistration(attempts: Int): Receive = {
     case s2e.RegisterExecutorAck(executorRef) =>
+      log.error("Executor acknowledged registration ...")
       val sandboxRef = sender()
       context.watchWith(sandboxRef, SandBoxTerminated)
       context.watchWith(executorRef, ExecutorTerminated)
       context.setReceiveTimeout(Duration.Undefined)
+      context.become(running(attempts))
     case ReceiveTimeout =>
-      if (attempts <= 3 ) {
+      if (attempts <= 3) {
         sandbox ! e2s.RegisterExecutor
-        context.become(awaitingExecutorRegistration(attempts+1))
+        context.become(awaitingExecutorRegistration(attempts + 1))
         context.setReceiveTimeout(5.seconds)
       } else {
         log.error(s"Sandbox doesn't respond to executor registration !!!")
         context.system.terminate()
       }
+  }
+
+  def running(attempts: Int): Receive = {
     case s2e.TerminateExecutor =>
       log.info(s"Executor terminating ...")
       context.system.terminate()

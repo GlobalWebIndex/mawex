@@ -2,8 +2,7 @@ package gwi.mawex.executor
 
 import java.util.concurrent.atomic.AtomicBoolean
 
-import akka.actor.{Actor, ActorLogging, ActorSelection, Address, AddressFromURIString, Props}
-import akka.remote.{DisassociatedEvent, RemotingErrorEvent}
+import akka.actor.{Actor, ActorLogging, ActorRef, ActorSelection, Address, AddressFromURIString, PoisonPill, Props, ReceiveTimeout}
 import com.typesafe.scalalogging.LazyLogging
 import gwi.mawex.{MawexService, RemoteService, e2s, s2e}
 import org.backuity.clist.{Command, opt}
@@ -21,24 +20,47 @@ object ExecutorCmd extends Command(name = "executor", description = "launches ex
   val ActorName   = "Executor"
   val SystemName  = "ExecutorSystem"
 
+  case object ExecutorTerminated
+  case object SandBoxTerminated
+
   class SandboxFrontDesk(sandbox: ActorSelection) extends Actor with ActorLogging {
     override def preStart(): Unit = {
       log.info(s"SandboxFrontDesk starting...")
-      context.system.eventStream.subscribe(self, classOf[DisassociatedEvent])
-      context.system.eventStream.subscribe(self, classOf[RemotingErrorEvent])
       sandbox ! e2s.RegisterExecutor
+      context.setReceiveTimeout(5.seconds)
     }
-    override def receive: Receive = {
-      case s2e.TerminateExecutor => context.system.terminate()
+
+    override def receive: Receive = awaitingExecutorRegistration(1)
+
+    def awaitingExecutorRegistration(attempts: Int): Receive = {
+      case s2e.RegisterExecutorAck(executorRef) =>
+        val sandboxRef = sender()
+        context.watchWith(sandboxRef, SandBoxTerminated)
+        context.watchWith(executorRef, ExecutorTerminated)
+        context.setReceiveTimeout(Duration.Undefined)
+        context.become(awaitingTermination(executorRef, sandboxRef))
+      case ReceiveTimeout =>
+        if (attempts <= 3 ) {
+          sandbox ! e2s.RegisterExecutor
+          context.become(awaitingExecutorRegistration(attempts+1))
+          context.setReceiveTimeout(5.seconds)
+        } else {
+          logger.error(s"Sandbox doesn't respond to executor registration !!!")
+          context.system.terminate()
+        }
     }
-    override def unhandled(message: Any): Unit = message match {
-      case DisassociatedEvent(local, remote, _) =>
-        log.info(s"Sandbox system $remote disassociated from $local ...")
+
+    def awaitingTermination(executorRef: ActorRef, sandboxRef: ActorRef): Receive = {
+      case s2e.TerminateExecutor =>
+        executorRef ! PoisonPill
+      case SandBoxTerminated =>
+        log.warning(s"SandBox terminated ...")
+        executorRef ! PoisonPill
+      case ExecutorTerminated =>
+        log.info(s"Executor terminated ...")
         context.system.terminate()
-      case RemotingErrorEvent(ex) =>
-        log.error(ex, s"Connection with Sandbox has error")
-      case x => super.unhandled(x)
     }
+
   }
 
   var sandboxActorPath = opt[Option[String]](name="sandbox-actor-path", description = "Serialization.serializedActorPath")

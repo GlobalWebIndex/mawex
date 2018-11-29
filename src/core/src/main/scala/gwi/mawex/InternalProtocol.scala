@@ -2,6 +2,8 @@ package gwi.mawex
 
 import java.util.UUID
 
+import akka.actor.ActorRef
+
 /** Master <=> Worker */
 case class WorkerId(consumerGroup: String, pod: String, id: String = UUID.randomUUID().toString)
 
@@ -23,6 +25,7 @@ protected[mawex] object m2w {
 /** SandBox => Executor */
 object s2e {
   case object TerminateExecutor
+  case class RegisterExecutorAck(executorRef: ActorRef)
 }
 
 /** Executor => SandBox */

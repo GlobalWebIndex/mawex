@@ -1,10 +1,11 @@
 package gwi.mawex.executor
 
 import akka.actor.SupervisorStrategy.{Escalate, Stop}
-import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorLogging, ActorRef, DeathPactException, Deploy, OneForOneStrategy, PoisonPill, Props, ReceiveTimeout}
-import akka.remote.{DisassociatedEvent, RemoteScope, RemotingErrorEvent}
+import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorLogging, ActorRef, DeathPactException, Deploy, OneForOneStrategy, Props, ReceiveTimeout, Terminated}
+import akka.remote.RemoteScope
 import akka.serialization.Serialization
 import gwi.mawex._
+import gwi.mawex.s2e.RegisterExecutorAck
 
 import scala.concurrent.duration._
 
@@ -32,11 +33,11 @@ class LocalJvmSandBox(executorProps: Props) extends SandBox {
   * Execution happens safely in a forked JVM process or k8 job, actor system is started there in order for the input and complex results to be passed/returned through akka remoting
   */
 class RemoteSandBox(controller: RemoteController, executorCmd: ExecutorCmd) extends SandBox {
-  private[this] var frontDeskRef: Option[ActorRef] = Option.empty
-  private[this] def shutDownRemoteActorSystem(): Unit = {
+
+  private[this] def shutDownRemoteActorSystem(frontDesk: ActorRef): Unit = {
     log.info("Shutting down Remote Executor Actor System !!!")
-    frontDeskRef.foreach(_ ! s2e.TerminateExecutor)
-    frontDeskRef = Option.empty
+    context.unwatch(frontDesk)
+    frontDesk ! s2e.TerminateExecutor
     controller.onStop()
   }
 
@@ -47,23 +48,12 @@ class RemoteSandBox(controller: RemoteController, executorCmd: ExecutorCmd) exte
     case _: Exception                    ⇒ Escalate
   }
 
-  override def preStart(): Unit = {
-    log.info(s"Sandbox starting...")
-    context.system.eventStream.subscribe(self, classOf[DisassociatedEvent])
-    context.system.eventStream.subscribe(self, classOf[RemotingErrorEvent])
-  }
-  override def postStop(): Unit = {
-    log.info(s"Sandbox stopping...")
-    shutDownRemoteActorSystem()
-  }
-
   override def unhandled(message: Any): Unit = message match {
-    case DisassociatedEvent(local, remote, _) =>
-      log.info(s"Forked executor system $remote disassociated from $local ...")
-      shutDownRemoteActorSystem()
-    case RemotingErrorEvent(ex) =>
-      log.error(ex, s"Connection with Executor has error")
-    case x => super.unhandled(x)
+    case Terminated(frontDesk) =>
+      log.info(s"FrontDesk terminated $frontDesk ...")
+      shutDownRemoteActorSystem(frontDesk)
+    case x =>
+      super.unhandled(x)
   }
 
   override def receive: Receive = idle
@@ -77,13 +67,15 @@ class RemoteSandBox(controller: RemoteController, executorCmd: ExecutorCmd) exte
 
   def awaitingForkRegistration(worker: ActorRef, task: Task): Receive = {
     case e2s.RegisterExecutor =>
-      val address = sender().path.address
-      log.info(s"Forked Executor registered at $address")
-      frontDeskRef = Some(sender())
       context.setReceiveTimeout(Duration.Undefined)
+      val frontDeskRef = sender()
+      frontDeskRef ! RegisterExecutorAck
+      val address = frontDeskRef.path.address
+      log.info(s"Forked Executor registered at $address")
+      context.watch(frontDeskRef)
       val executorRef = context.actorOf(controller.executorProps.withDeploy(Deploy(scope = RemoteScope(address))), ExecutorCmd.ActorName)
       executorRef ! task
-      context.become(working(worker, executorRef))
+      context.become(working(worker, frontDeskRef))
     case ReceiveTimeout =>
       if (controller.isRunning) {
         log.info("Forked Executor Remote actor system has not registered, waiting ...")
@@ -92,17 +84,16 @@ class RemoteSandBox(controller: RemoteController, executorCmd: ExecutorCmd) exte
         log.warning("Forked Executor Remote actor system has not registered !!!")
         context.become(idle)
         worker ! TaskResult(task.id, Left(s"Executor did not reply for task ${task.id} ..."))
-        shutDownRemoteActorSystem()
+        controller.onStop()
       }
   }
 
-  def working(worker: ActorRef, executor: ActorRef): Receive = {
+  def working(worker: ActorRef, frontDesk: ActorRef): Receive = {
     case taskResult: TaskResult =>
-      executor ! PoisonPill
       log.info(s"Executor finished task with result : ${taskResult.result}")
       worker ! taskResult
-      shutDownRemoteActorSystem()
       context.become(idle)
+      shutDownRemoteActorSystem(frontDesk)
   }
 
 }

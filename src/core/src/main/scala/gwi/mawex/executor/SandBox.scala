@@ -10,6 +10,7 @@ import gwi.mawex.s2e.RegisterExecutorAck
 import scala.concurrent.duration._
 
 sealed trait SandBox extends Actor with ActorLogging {
+  def executorProps: Props
   override def supervisorStrategy = OneForOneStrategy() {
     case _: ActorInitializationException ⇒ Stop
     case _: ActorKilledException         ⇒ Stop
@@ -19,7 +20,7 @@ sealed trait SandBox extends Actor with ActorLogging {
 }
 
 /** SandBox for local JVM execution, it just simply forwards Task/Result from Worker to executor */
-class LocalJvmSandBox(executorProps: Props) extends SandBox {
+class LocalJvmSandBox(val executorProps: Props) extends SandBox {
   override def receive: Receive = {
     case task: Task =>
       context
@@ -32,14 +33,7 @@ class LocalJvmSandBox(executorProps: Props) extends SandBox {
 /**
   * Execution happens safely in a forked JVM process or k8 job, actor system is started there in order for the input and complex results to be passed/returned through akka remoting
   */
-class RemoteSandBox(controller: RemoteController, executorCmd: ExecutorCmd) extends SandBox {
-
-  private[this] def shutDownRemoteActorSystem(frontDesk: ActorRef): Unit = {
-    log.info("Shutting down Remote Executor Actor System !!!")
-    context.unwatch(frontDesk)
-    frontDesk ! s2e.TerminateExecutor
-    controller.onStop()
-  }
+class RemoteSandBox(executorSupervisorProps: Props, val executorProps: Props, executorCmd: ExecutorCmd) extends SandBox {
 
   override def supervisorStrategy: OneForOneStrategy = OneForOneStrategy() {
     case _: ActorInitializationException ⇒ Stop
@@ -48,24 +42,30 @@ class RemoteSandBox(controller: RemoteController, executorCmd: ExecutorCmd) exte
     case _: Exception                    ⇒ Escalate
   }
 
-  override def unhandled(message: Any): Unit = message match {
-    case Terminated(frontDesk) =>
-      log.info(s"FrontDesk terminated $frontDesk ...")
-      shutDownRemoteActorSystem(frontDesk)
-    case x =>
-      super.unhandled(x)
+  private[this] def stopExecutorSupervisor(worker: ActorRef, task: Task, taskResult: TaskResult, executorSupervisorRef: ActorRef, frontDeskOpt: Option[ActorRef] = None): Unit = {
+    frontDeskOpt.foreach { frontDesk =>
+      log.info(s"Stopping frontDesk $frontDesk")
+      frontDesk ! s2e.TerminateExecutor
+      context.unwatch(frontDesk)
+    }
+    worker ! taskResult
+    context.become(idle(context.actorOf(executorSupervisorProps)))
+    executorSupervisorRef ! ExecutorSupervisor.Stop
   }
 
-  override def receive: Receive = idle
+  override def receive: Receive = idle(context.actorOf(executorSupervisorProps))
 
-  def idle: Receive = {
+  def idle(executorSupervisorRef: ActorRef): Receive = {
     case task@Task(id, _) =>
-      context.become(awaitingForkRegistration(sender(), task))
-      context.setReceiveTimeout(15.seconds)
-      controller.start(id, executorCmd.activate(Serialization.serializedActorPath(self)))
+      context.become(awaitingForkRegistration(sender(), task, executorSupervisorRef))
+      executorSupervisorRef ! ExecutorSupervisor.Start(id, executorCmd.activate(Serialization.serializedActorPath(self)))
   }
 
-  def awaitingForkRegistration(worker: ActorRef, task: Task): Receive = {
+  def awaitingForkRegistration(worker: ActorRef, task: Task, executorSupervisorRef: ActorRef): Receive = {
+    case ExecutorSupervisor.Crashed =>
+      stopExecutorSupervisor(worker, task, TaskResult(task.id, Left(s"Spinning Remote Executor system crashed while executing task ${task.id} !!!")), executorSupervisorRef)
+    case ExecutorSupervisor.TimedOut =>
+      stopExecutorSupervisor(worker, task, TaskResult(task.id, Left(s"Spinning Remote Executor system timed out while executing task ${task.id} !!!")), executorSupervisorRef)
     case e2s.RegisterExecutor =>
       context.setReceiveTimeout(Duration.Undefined)
       val frontDeskRef = sender()
@@ -73,27 +73,19 @@ class RemoteSandBox(controller: RemoteController, executorCmd: ExecutorCmd) exte
       val address = frontDeskRef.path.address
       log.info(s"Forked Executor registered at $address")
       context.watch(frontDeskRef)
-      val executorRef = context.actorOf(controller.executorProps.withDeploy(Deploy(scope = RemoteScope(address))), ExecutorCmd.ActorName)
+      val executorRef = context.actorOf(executorProps.withDeploy(Deploy(scope = RemoteScope(address))), ExecutorCmd.ActorName)
       executorRef ! task
-      context.become(working(worker, frontDeskRef))
-    case ReceiveTimeout =>
-      if (controller.isRunning) {
-        log.info("Forked Executor Remote actor system has not registered, waiting ...")
-        context.setReceiveTimeout(controller.executorConf.checkInterval)
-      } else {
-        log.warning("Forked Executor Remote actor system has not registered !!!")
-        context.become(idle)
-        worker ! TaskResult(task.id, Left(s"Executor did not reply for task ${task.id} ..."))
-        controller.onStop()
-      }
+      context.become(working(worker, task, frontDeskRef, executorSupervisorRef))
   }
 
-  def working(worker: ActorRef, frontDesk: ActorRef): Receive = {
+  def working(worker: ActorRef, task: Task, frontDesk: ActorRef, executorSupervisorRef: ActorRef): Receive = {
     case taskResult: TaskResult =>
       log.info(s"Executor finished task with result : ${taskResult.result}")
-      worker ! taskResult
-      context.become(idle)
-      shutDownRemoteActorSystem(frontDesk)
+      stopExecutorSupervisor(worker, task, taskResult, executorSupervisorRef, Option(frontDesk))
+    case Terminated(_) =>
+      log.info(s"FrontDesk terminated $frontDesk ...")
+      val taskResult = TaskResult(task.id, Left(s"Remote Executor system disconnected while executing task ${task.id} !!!"))
+      stopExecutorSupervisor(worker, task, taskResult, executorSupervisorRef, Option(frontDesk))
   }
 
 }
@@ -102,8 +94,8 @@ object SandBox {
   val ActorName = "SandBox"
   def localJvmProps(executorProps: Props): Props =
     Props(classOf[LocalJvmSandBox], executorProps)
-  def forkingProps(executorProps: Props, forkedJvm: ForkedJvmConf, executorCmd: ExecutorCmd): Props =
-    Props(classOf[RemoteSandBox], ForkingController(executorProps, forkedJvm), executorCmd)
+  def forkingProps(executorProps: Props, forkedJvmConf: ForkedJvmConf, executorCmd: ExecutorCmd): Props =
+    Props(classOf[RemoteSandBox], Props(classOf[ForkingExecutorSupervisor], forkedJvmConf), executorProps, executorCmd)
   def k8JobProps(executorProps: Props, k8JobConf: K8JobConf, executorCmd: ExecutorCmd): Props =
-    Props(classOf[RemoteSandBox], K8JobController(executorProps, k8JobConf), executorCmd)
+    Props(classOf[RemoteSandBox], Props(classOf[K8JobExecutorSupervisor], k8JobConf), executorProps, executorCmd)
 }

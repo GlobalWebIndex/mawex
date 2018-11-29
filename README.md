@@ -124,6 +124,9 @@ Actual jobs should be executed in isolated environment or cloud and never affect
         - task is executed as Kubernetes Job
         - recommended for heavy tasks
 
+Local SandBox is dummy, it just executes tasks in current jvm process.
+Remote SandBox has either `ForkingExecutorSupervisor` or `K8JobExecutorSupervisor` which is supervising remote actor system in a forked jvm process or a k8s job.
+
 ### Example setup
 
 ```

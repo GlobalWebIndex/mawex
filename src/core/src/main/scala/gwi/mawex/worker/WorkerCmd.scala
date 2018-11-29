@@ -16,7 +16,6 @@ object WorkerCmd extends Command(name = "workers", description = "launches worke
   var consumerGroups                = opt[List[String]](useEnv = true, default = List("default"), description = "sum,add,divide - 3 workers in 3 consumer groups")
   var pod                           = opt[String](useEnv = true, default = "default", description = "Workers within the same pod are executing sequentially")
   var masterId                      = opt[String](useEnv = true, default = "master", name="master-id")
-  var taskTimeout                   = opt[Int](useEnv = true, default = 60*60, description = "timeout for a task in seconds")
   var executorType                  = opt[String](useEnv = true, default = "forked", name = "executor-type", description = "local / forked / k8s")
   var sandboxJvmOpts                = opt[Option[String]](useEnv = true, name = "sandbox-jvm-opts", description = "Whether to execute task in a forked process and with what JVM options")
   var sandboxCheckInterval          = opt[Int](useEnv = true, default = 2*60, name = "sandbox-check-interval", description = "Interval in seconds of checking for jobs spawned in sandbox")
@@ -88,7 +87,7 @@ object WorkerCmd extends Command(name = "workers", description = "launches worke
         masterId,
         clusterClient,
         WorkerId(consumerGroup, pod),
-        taskTimeout.seconds,
+        ((sandboxCheckLimit * sandboxCheckInterval) + 10).seconds,
         getSandBoxProps(executorProps, consumerGroup),
         system
       )

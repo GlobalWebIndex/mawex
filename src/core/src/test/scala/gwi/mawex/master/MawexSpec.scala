@@ -227,7 +227,7 @@ abstract class AbstractMawexSpec(_system: ActorSystem) extends TestKit(_system) 
         masterProxy ! Task(taskId_2, 1)
         expectMsg(p2c.Accepted(taskId_1))
         expectMsg(p2c.Accepted(taskId_2))
-        Thread.sleep(100)
+        Thread.sleep(40)
         assertStatus(Set.empty, Set(nextTaskId_1, nextTaskId_2), _ => (), workerStatus => assertResult(Set(Busy(taskId_1), Busy(taskId_2)))(workerStatus.values.toSet))
         Thread.sleep(singleMsgTimeout.toMillis)
       }

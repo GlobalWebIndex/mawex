@@ -48,9 +48,9 @@ class RemoteSandBox(executorSupervisorProps: Props, val executorProps: Props, ex
       frontDesk ! s2e.TerminateExecutor
       context.unwatch(frontDesk)
     }
+    executorSupervisorRef ! s2es.Stop
     worker ! taskResult
     context.become(idle(context.actorOf(executorSupervisorProps)))
-    executorSupervisorRef ! s2es.Stop
   }
 
   override def receive: Receive = idle(context.actorOf(executorSupervisorProps))

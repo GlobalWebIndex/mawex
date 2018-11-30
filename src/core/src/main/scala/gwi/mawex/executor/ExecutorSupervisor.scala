@@ -78,6 +78,7 @@ class ForkingExecutorSupervisor(val executorConf: ForkedJvmConf) extends Executo
           if (counter == 3 && process.isAlive()) {
             log.info("JVM process did not die, destroying ...")
             Try(process.destroy())
+            context.stop(self)
           }
           process.isAlive()
         case _ =>
@@ -127,13 +128,13 @@ class K8JobExecutorSupervisor(val executorConf: K8JobConf) extends ExecutorSuper
         context.system.scheduler.scheduleOnce(executorConf.checkInterval, self, ExecutorSupervisor.Check(sandboxRef))(Implicits.global)
       }
     case s2es.Stop =>
-      logger.info(s"Deleting k8s job $jobName")
-      Future(deleteJob(jobName, executorConf)) onComplete {
+      log.info(s"Deleting k8s job $jobName")
+      Try(deleteJob(jobName, executorConf)) match {
         case Success(status) =>
-          logger.info(s"Job $jobName successfully deleted, status: \n$status")
+          log.info(s"Job $jobName successfully deleted, status: \n$status")
           context.stop(self)
         case Failure(ex) =>
-          logger.warn(s"Deleting job $jobName failed !!!", ex)
+          log.error(ex, s"Deleting job $jobName failed !!!")
           context.stop(self)
       }
   }

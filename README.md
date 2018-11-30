@@ -98,13 +98,6 @@ if you run a lot of microservices.
 This system was designed for an ETL pipeline orchestrated by [saturator](https://github.com/GlobalWebIndex/saturator)
 which is a FSM that sees pipeline as layered DAG and saturates/satisfies dependencies by executing ETL tasks on Mawex.
 
-### mawex persistence and clustering details :
-
-Mawex akka persistence is tested with [akka-persistence-dynamodb](https://github.com/akka/akka-persistence-dynamodb) and redis plugin
-but running it on different storages like cassandra is just a matter of configuration changes, choose a storage based on
-amount and throughput of tasks that are being submitted to it.
-By default it uses the Oldest node auto-downing strategy for split-brain cases because the cluster is solely about Singleton with actor residing on the oldest node.
-
 ### Production cluster behavior
 
 When you deploy a cluster of Master and Worker nodes, you are free to stop/start Workers freely, they just register and unregister from Master
@@ -114,18 +107,25 @@ and you can ship them without restarting whole cluster, even if you don't have r
 ### Sandboxing
 
 Actual jobs should be executed in isolated environment or cloud and never affect runtime of the actual Worker, there are three implementations :
-    - local-jvm
-        - task is executed within the current jvm process
-        - recommended for lightweight tasks with simple computation, nothing with high memory requirements or cpu heavy
-    - forked-jvm
-        - task is executed within forked jvm process
-        - recommended for heavy tasks as the worker jvm process is not directly affected
-    - k8s job
-        - task is executed as Kubernetes Job
-        - recommended for heavy tasks
+ 1. local-jvm
+     - task is executed within the current jvm process
+     - recommended for lightweight tasks with simple computation, nothing with high memory requirements or cpu heavy
+ 2. forked-jvm
+     - task is executed within forked jvm process
+     - recommended for heavy tasks as the worker jvm process is not directly affected
+ 3. k8s job
+     - task is executed as Kubernetes Job
+     - recommended for heavy tasks
 
 Local SandBox is dummy, it just executes tasks in current jvm process.
 Remote SandBox has either `ForkingExecutorSupervisor` or `K8JobExecutorSupervisor` which is supervising remote actor system in a forked jvm process or a k8s job.
+
+### mawex persistence and clustering details :
+
+Mawex akka persistence is tested with [akka-persistence-dynamodb](https://github.com/akka/akka-persistence-dynamodb) and redis plugin
+but running it on different storages like cassandra is just a matter of configuration changes, choose a storage based on
+amount and throughput of tasks that are being submitted to it.
+By default it uses the Oldest node auto-downing strategy for split-brain cases because the cluster is solely about Singleton with actor residing on the oldest node.
 
 ### Example setup
 

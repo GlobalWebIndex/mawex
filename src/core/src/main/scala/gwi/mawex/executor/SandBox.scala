@@ -44,13 +44,13 @@ class RemoteSandBox(executorSupervisorProps: Props, val executorProps: Props, ex
 
   private[this] def stopExecutorSupervisor(worker: ActorRef, task: Task, taskResult: TaskResult, executorSupervisorRef: ActorRef, frontDeskOpt: Option[ActorRef] = None): Unit = {
     frontDeskOpt.foreach { frontDesk =>
-      log.info(s"Stopping frontDesk $frontDesk")
+      log.info(s" Stopping frontDesk $frontDesk")
       frontDesk ! s2e.TerminateExecutor
       context.unwatch(frontDesk)
     }
     worker ! taskResult
     context.become(idle(context.actorOf(executorSupervisorProps)))
-    executorSupervisorRef ! ExecutorSupervisor.Stop
+    executorSupervisorRef ! s2es.Stop
   }
 
   override def receive: Receive = idle(context.actorOf(executorSupervisorProps))
@@ -58,22 +58,22 @@ class RemoteSandBox(executorSupervisorProps: Props, val executorProps: Props, ex
   def idle(executorSupervisorRef: ActorRef): Receive = {
     case task@Task(id, _) =>
       context.become(awaitingForkRegistration(sender(), task, executorSupervisorRef))
-      executorSupervisorRef ! ExecutorSupervisor.Start(id, executorCmd.activate(Serialization.serializedActorPath(self)))
+      executorSupervisorRef ! s2es.Start(id, executorCmd.activate(Serialization.serializedActorPath(self)))
   }
 
   def awaitingForkRegistration(worker: ActorRef, task: Task, executorSupervisorRef: ActorRef): Receive = {
-    case ExecutorSupervisor.Crashed =>
+    case es2s.Crashed =>
       stopExecutorSupervisor(worker, task, TaskResult(task.id, Left(s"Spinning Remote Executor system crashed while executing task ${task.id} !!!")), executorSupervisorRef)
-    case ExecutorSupervisor.TimedOut =>
+    case es2s.TimedOut =>
       stopExecutorSupervisor(worker, task, TaskResult(task.id, Left(s"Spinning Remote Executor system timed out while executing task ${task.id} !!!")), executorSupervisorRef)
     case e2s.RegisterExecutor =>
       context.setReceiveTimeout(Duration.Undefined)
       val frontDeskRef = sender()
-      frontDeskRef ! RegisterExecutorAck
       val address = frontDeskRef.path.address
       log.info(s"Forked Executor registered at $address")
       context.watch(frontDeskRef)
       val executorRef = context.actorOf(executorProps.withDeploy(Deploy(scope = RemoteScope(address))), ExecutorCmd.ActorName)
+      frontDeskRef ! RegisterExecutorAck(executorRef)
       executorRef ! task
       context.become(working(worker, task, frontDeskRef, executorSupervisorRef))
   }

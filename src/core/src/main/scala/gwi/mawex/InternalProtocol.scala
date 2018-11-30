@@ -3,6 +3,7 @@ package gwi.mawex
 import java.util.UUID
 
 import akka.actor.ActorRef
+import gwi.mawex.executor.ExecutorCmd
 
 /** Master <=> Worker */
 case class WorkerId(consumerGroup: String, pod: String, id: String = UUID.randomUUID().toString)
@@ -26,6 +27,18 @@ protected[mawex] object m2w {
 object s2e {
   case object TerminateExecutor
   case class RegisterExecutorAck(executorRef: ActorRef)
+}
+
+/** SandBox => ExecutorSupervisor */
+object s2es {
+  case class Start(taskId: TaskId, executorCmd: ExecutorCmd)
+  case object Stop
+}
+
+/** ExecutorSupervisor => SandBox */
+object es2s {
+  case object Crashed
+  case object TimedOut
 }
 
 /** Executor => SandBox */

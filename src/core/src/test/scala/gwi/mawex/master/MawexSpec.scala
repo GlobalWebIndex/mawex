@@ -26,13 +26,13 @@ import scala.util.{Failure, Success, Try}
 class LocalMawexSpec(_system: ActorSystem) extends AbstractMawexSpec(_system: ActorSystem) {
   def this() = this(ClusterService.buildClusterSystem(HostAddress("localhost", 0), List.empty, 1))
   protected def executorProps(underlyingProps: Props): Props = SandBox.localJvmProps(underlyingProps)
-  protected def singleMsgTimeout: FiniteDuration = 3.seconds
+  protected def singleMsgTimeout: FiniteDuration = 1.second
 }
 
 class ForkedMawexSpec(_system: ActorSystem) extends AbstractMawexSpec(_system: ActorSystem) {
   def this() = this(ClusterService.buildClusterSystem(HostAddress("localhost", 0), List.empty, 1))
-  protected def executorProps(underlyingProps: Props): Props = SandBox.forkingProps(underlyingProps, ForkedJvmConf(System.getProperty("java.class.path"), 1.minute, 1), ExecutorCmd(Some(jvmOpts)))
-  protected def singleMsgTimeout: FiniteDuration = 6.seconds
+  protected def executorProps(underlyingProps: Props): Props = SandBox.forkingProps(underlyingProps, ForkedJvmConf(System.getProperty("java.class.path"), 60.minute, 1), ExecutorCmd(Some(jvmOpts)))
+  protected def singleMsgTimeout: FiniteDuration = 4.seconds
 }
 
 abstract class AbstractMawexSpec(_system: ActorSystem) extends TestKit(_system) with DockerSupport with Matchers with FreeSpecLike with BeforeAndAfterAll with ImplicitSender with Eventually {
@@ -97,7 +97,7 @@ abstract class AbstractMawexSpec(_system: ActorSystem) extends TestKit(_system) 
     val workerRefs =
       workerSpots.map { case WorkerDef(workerId, props) =>
         val workerRef = workerSystem.actorOf(Worker.props(MasterId, clusterWorkerClient, workerId, props, singleMsgTimeout * 14, 1.second), s"worker-${workerId.id}")
-        Thread.sleep(40)
+        Thread.sleep(100)
         workerId -> workerRef
       }
     try

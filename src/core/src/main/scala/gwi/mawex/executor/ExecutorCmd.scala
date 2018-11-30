@@ -1,6 +1,6 @@
 package gwi.mawex.executor
 
-import akka.actor.{Actor, ActorLogging, ActorSelection, Address, AddressFromURIString, Props, ReceiveTimeout}
+import akka.actor.{Actor, ActorLogging, ActorRef, ActorSelection, Address, AddressFromURIString, Props, ReceiveTimeout}
 import com.typesafe.scalalogging.LazyLogging
 import gwi.mawex.{MawexService, RemoteService, e2s, s2e}
 import org.backuity.clist.{Command, opt}
@@ -28,6 +28,7 @@ object ExecutorCmd extends Command(name = "executor", description = "launches ex
       logger.info("Remote Actor System just shut down, exiting jvm process !!!")
       System.exit(0)
     }(ExecutionContext.Implicits.global)
+    sys.addShutdownHook(Option(executorSystem).foreach(_.terminate()))
   }
 
   def run(): Unit = startAndRegisterExecutorToSandBox()
@@ -35,9 +36,6 @@ object ExecutorCmd extends Command(name = "executor", description = "launches ex
   def apply(jvmOpts: Option[String]): ExecutorCmd =
     ExecutorCmd(List("executor"), jvmOpts)
 }
-
-case object ExecutorTerminated
-case object SandBoxTerminated
 
 class SandboxFrontDesk(sandbox: ActorSelection) extends Actor with ActorLogging {
   override def preStart(): Unit = {
@@ -50,12 +48,9 @@ class SandboxFrontDesk(sandbox: ActorSelection) extends Actor with ActorLogging 
 
   def awaitingExecutorRegistration(attempts: Int): Receive = {
     case s2e.RegisterExecutorAck(executorRef) =>
-      log.error("Executor acknowledged registration ...")
-      val sandboxRef = sender()
-      context.watchWith(sandboxRef, SandBoxTerminated)
-      context.watchWith(executorRef, ExecutorTerminated)
+      log.info("Executor acknowledged registration ...")
       context.setReceiveTimeout(Duration.Undefined)
-      context.become(running(attempts))
+      context.become(running(executorRef))
     case ReceiveTimeout =>
       if (attempts <= 3) {
         sandbox ! e2s.RegisterExecutor
@@ -67,15 +62,10 @@ class SandboxFrontDesk(sandbox: ActorSelection) extends Actor with ActorLogging 
       }
   }
 
-  def running(attempts: Int): Receive = {
+  def running(executorRef: ActorRef): Receive = {
     case s2e.TerminateExecutor =>
       log.info(s"Executor terminating ...")
-      context.system.terminate()
-    case SandBoxTerminated =>
-      log.warning(s"SandBox terminated ...")
-      context.system.terminate()
-    case ExecutorTerminated =>
-      log.info(s"Executor terminated ...")
+      context.stop(executorRef)
       context.system.terminate()
   }
 

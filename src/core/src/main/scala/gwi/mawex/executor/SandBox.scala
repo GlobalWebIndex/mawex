@@ -63,9 +63,9 @@ class RemoteSandBox(executorSupervisorProps: Props, val executorProps: Props, ex
 
   def awaitingForkRegistration(worker: ActorRef, task: Task, executorSupervisorRef: ActorRef): Receive = {
     case es2s.Crashed =>
-      stopExecutorSupervisor(worker, task, TaskResult(task.id, Left(s"Spinning Remote Executor system crashed while executing task ${task.id} !!!")), executorSupervisorRef)
+      stopExecutorSupervisor(worker, task, TaskResult(task.id, Left(s"Executor system did not start executing task ${task.id} !!!")), executorSupervisorRef)
     case es2s.TimedOut =>
-      stopExecutorSupervisor(worker, task, TaskResult(task.id, Left(s"Spinning Remote Executor system timed out while executing task ${task.id} !!!")), executorSupervisorRef)
+      stopExecutorSupervisor(worker, task, TaskResult(task.id, Left(s"Executor system timed out to start executing task ${task.id} !!!")), executorSupervisorRef)
     case e2s.RegisterExecutor =>
       context.setReceiveTimeout(Duration.Undefined)
       val frontDeskRef = sender()
@@ -79,6 +79,10 @@ class RemoteSandBox(executorSupervisorProps: Props, val executorProps: Props, ex
   }
 
   def working(worker: ActorRef, task: Task, frontDesk: ActorRef, executorSupervisorRef: ActorRef): Receive = {
+    case es2s.Crashed =>
+      log.warning(s"Executor might have crashed while executing task ${task.id} as the job started but doesn't exist now !!!")
+    case es2s.TimedOut =>
+      stopExecutorSupervisor(worker, task, TaskResult(task.id, Left(s"Executor system timed out to start executing task ${task.id} !!!")), executorSupervisorRef)
     case taskResult: TaskResult =>
       log.info(s"Executor finished task with result : ${taskResult.result}")
       stopExecutorSupervisor(worker, task, taskResult, executorSupervisorRef, Option(frontDesk))

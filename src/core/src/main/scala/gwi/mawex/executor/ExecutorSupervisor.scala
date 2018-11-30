@@ -72,7 +72,7 @@ class ForkingExecutorSupervisor(val executorConf: ForkedJvmConf) extends Executo
       }
     case s2es.Stop =>
       (1 to 3).foldLeft(process.isAlive()) {
-        case (acc, counter) if acc =>
+        case (isAlive, counter) if isAlive =>
           log.info("JVM process is still alive, waiting a second ...")
           Thread.sleep(500)
           if (counter == 3 && process.isAlive()) {

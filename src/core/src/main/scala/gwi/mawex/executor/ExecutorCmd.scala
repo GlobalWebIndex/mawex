@@ -21,11 +21,11 @@ object ExecutorCmd extends Command(name = "executor", description = "launches ex
 
   private def startAndRegisterExecutorToSandBox(): Unit = {
     require(sandboxActorPath.isDefined, s"Please supply sandbox-actor-path parameter !!!")
-    logger.info(s"Starting executor and connecting to ${sandboxActorPath.get}")
+    logger.debug(s"Starting executor and connecting to ${sandboxActorPath.get}")
     val executorSystem = RemoteService.buildRemoteSystem(Address("akka.tcp", SystemName, AddressFromURIString(sandboxActorPath.get).host.get, 0))
     executorSystem.actorOf(Props(classOf[SandboxFrontDesk], executorSystem.actorSelection(sandboxActorPath.get)))
     executorSystem.whenTerminated.onComplete { _ =>
-      logger.info("Remote Actor System just shut down, exiting jvm process !!!")
+      logger.debug("Remote Actor System just shut down, exiting jvm process !!!")
       System.exit(0)
     }(ExecutionContext.Implicits.global)
     sys.addShutdownHook(Option(executorSystem).foreach(_.terminate()))
@@ -39,7 +39,7 @@ object ExecutorCmd extends Command(name = "executor", description = "launches ex
 
 class SandboxFrontDesk(sandbox: ActorSelection) extends Actor with ActorLogging {
   override def preStart(): Unit = {
-    log.info(s"SandboxFrontDesk starting...")
+    log.debug(s"SandboxFrontDesk starting...")
     context.setReceiveTimeout(5.seconds)
     sandbox ! e2s.RegisterExecutor
   }
@@ -48,7 +48,7 @@ class SandboxFrontDesk(sandbox: ActorSelection) extends Actor with ActorLogging 
 
   def awaitingExecutorRegistration(attempts: Int): Receive = {
     case s2e.RegisterExecutorAck(executorRef) =>
-      log.info("Executor acknowledged registration ...")
+      log.debug("Executor acknowledged registration ...")
       context.setReceiveTimeout(Duration.Undefined)
       context.become(running(executorRef))
     case ReceiveTimeout =>
@@ -64,7 +64,7 @@ class SandboxFrontDesk(sandbox: ActorSelection) extends Actor with ActorLogging 
 
   def running(executorRef: ActorRef): Receive = {
     case s2e.TerminateExecutor =>
-      log.info(s"Executor terminating ...")
+      log.debug(s"Executor terminating ...")
       context.stop(executorRef)
       context.system.terminate()
   }

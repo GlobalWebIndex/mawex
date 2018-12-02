@@ -52,7 +52,7 @@ class ForkingExecutorSupervisor(val executorConf: ForkedJvmConf) extends Executo
         case Success(process) =>
           context.become(running(attempts, process))
           context.system.scheduler.scheduleOnce(executorConf.checkInterval, self, ExecutorSupervisor.Check(sandboxRef))(Implicits.global)
-          log.info(s"Process successfully started ...")
+          log.debug(s"Process successfully started ...")
         case Failure(ex) =>
           sandboxRef ! es2s.Crashed
           log.error(ex,s"Starting process failed !!!")
@@ -71,19 +71,20 @@ class ForkingExecutorSupervisor(val executorConf: ForkedJvmConf) extends Executo
         context.system.scheduler.scheduleOnce(executorConf.checkInterval, self, ExecutorSupervisor.Check(sandboxRef))(Implicits.global)
       }
     case s2es.Stop =>
-      (1 to 3).foldLeft(process.isAlive()) {
-        case (isAlive, counter) if isAlive =>
-          log.info("JVM process is still alive, waiting a second ...")
-          Thread.sleep(500)
-          if (counter == 3 && process.isAlive()) {
-            log.info("JVM process did not die, destroying ...")
-            Try(process.destroy())
-            context.stop(self)
-          }
-          process.isAlive()
-        case _ =>
-          false
-      }
+      Future(
+        (1 to 3).foldLeft(process.isAlive()) {
+          case (isAlive, counter) if isAlive =>
+            log.debug("JVM process is still alive, waiting a second ...")
+            Thread.sleep(500)
+            if (counter == 3 && process.isAlive()) {
+              log.debug("JVM process did not die, destroying ...")
+              Try(process.destroy())
+            }
+            process.isAlive()
+          case _ =>
+            false
+        }
+      ) andThen { case _ => Try(context.stop(self)) }
   }
 }
 
@@ -104,11 +105,11 @@ class K8JobExecutorSupervisor(val executorConf: K8JobConf) extends ExecutorSuper
     case s2es.Start(taskId, executorCmd) =>
       val jobName = JobName(taskId)
       val sandboxRef = sender()
-      logger.info(s"Starting k8s job $jobName")
+      logger.debug(s"Starting k8s job $jobName")
       context.become(running(attempts, jobName))
       Future(runJob(jobName, executorConf, executorCmd)) onComplete {
         case Success(job) =>
-          logger.info(s"Job $jobName successfully started ${getJobStatusConditions(job)}")
+          logger.debug(s"Job $jobName successfully started ${getJobStatusConditions(job)}")
           context.system.scheduler.scheduleOnce(executorConf.checkInterval, self, ExecutorSupervisor.Check(sandboxRef))(Implicits.global)
         case Failure(ex) =>
           logger.error(s"Starting job $jobName failed !!!", ex)
@@ -128,14 +129,14 @@ class K8JobExecutorSupervisor(val executorConf: K8JobConf) extends ExecutorSuper
         context.system.scheduler.scheduleOnce(executorConf.checkInterval, self, ExecutorSupervisor.Check(sandboxRef))(Implicits.global)
       }
     case s2es.Stop =>
-      log.info(s"Deleting k8s job $jobName")
-      Try(deleteJob(jobName, executorConf)) match {
+      log.debug(s"Deleting k8s job $jobName")
+      Future(deleteJob(jobName, executorConf)) andThen {
         case Success(status) =>
-          log.info(s"Job $jobName successfully deleted, status: \n$status")
-          context.stop(self)
+          log.debug(s"Job $jobName successfully deleted, status: \n$status")
+          Try(context.stop(self))
         case Failure(ex) =>
           log.error(ex, s"Deleting job $jobName failed !!!")
-          context.stop(self)
+          Try(context.stop(self))
       }
   }
 

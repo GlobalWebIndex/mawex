@@ -1,7 +1,7 @@
 package gwi.mawex.executor
 
 import akka.actor.SupervisorStrategy.{Escalate, Stop}
-import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorLogging, ActorRef, DeathPactException, Deploy, OneForOneStrategy, Props, ReceiveTimeout, Terminated}
+import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorLogging, ActorRef, DeathPactException, Deploy, OneForOneStrategy, Props, Terminated}
 import akka.remote.RemoteScope
 import akka.serialization.Serialization
 import gwi.mawex._
@@ -44,7 +44,7 @@ class RemoteSandBox(executorSupervisorProps: Props, val executorProps: Props, ex
 
   private[this] def stopExecutorSupervisor(worker: ActorRef, task: Task, taskResult: TaskResult, executorSupervisorRef: ActorRef, frontDeskOpt: Option[ActorRef] = None): Unit = {
     frontDeskOpt.foreach { frontDesk =>
-      log.info(s" Stopping frontDesk $frontDesk")
+      log.debug(s" Stopping frontDesk $frontDesk")
       frontDesk ! s2e.TerminateExecutor
       context.unwatch(frontDesk)
     }
@@ -70,7 +70,7 @@ class RemoteSandBox(executorSupervisorProps: Props, val executorProps: Props, ex
       context.setReceiveTimeout(Duration.Undefined)
       val frontDeskRef = sender()
       val address = frontDeskRef.path.address
-      log.info(s"Forked Executor registered at $address")
+      log.debug(s"Forked Executor registered at $address")
       context.watch(frontDeskRef)
       val executorRef = context.actorOf(executorProps.withDeploy(Deploy(scope = RemoteScope(address))), ExecutorCmd.ActorName)
       frontDeskRef ! RegisterExecutorAck(executorRef)
@@ -84,10 +84,10 @@ class RemoteSandBox(executorSupervisorProps: Props, val executorProps: Props, ex
     case es2s.TimedOut =>
       stopExecutorSupervisor(worker, task, TaskResult(task.id, Left(s"Executor system timed out to start executing task ${task.id} !!!")), executorSupervisorRef)
     case taskResult: TaskResult =>
-      log.info(s"Executor finished task with result : ${taskResult.result}")
+      log.debug(s"Executor finished task with result : ${taskResult.result}")
       stopExecutorSupervisor(worker, task, taskResult, executorSupervisorRef, Option(frontDesk))
     case Terminated(_) =>
-      log.info(s"FrontDesk terminated $frontDesk ...")
+      log.debug(s"FrontDesk terminated $frontDesk ...")
       val taskResult = TaskResult(task.id, Left(s"Remote Executor system disconnected while executing task ${task.id} !!!"))
       stopExecutorSupervisor(worker, task, taskResult, executorSupervisorRef, Option(frontDesk))
   }

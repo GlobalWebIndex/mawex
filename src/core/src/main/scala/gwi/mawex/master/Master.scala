@@ -43,7 +43,7 @@ class Master(conf: Master.Config) extends PersistentActor with ActorLogging {
   override def receiveRecover: Receive = {
     case event: TaskDomainEvent =>
       workState = workState.updated(event)
-      log.info("Replaying {}", event.getClass.getName)
+      log.debug("Replaying {}", event.getClass.getName)
   }
 
   private[this] def notifyWorkers(): Unit =
@@ -88,7 +88,7 @@ class Master(conf: Master.Config) extends PersistentActor with ActorLogging {
             persist(TaskStarted(task.id)) { event =>
               workState = workState.updated(event)
               workersById.get(workerId).filter(_.status == Idle).foreach { _ =>
-                log.info("Giving worker {} some task {}", workerId, task.id)
+                log.debug("Giving worker {} some task {}", workerId, task.id)
                 workersById.employ(workerId, task.id)
                 mediator ! DistributedPubSubMediator.Publish(conf.masterId, m2p.TaskScheduled(task.id))
                 s ! task
@@ -99,9 +99,10 @@ class Master(conf: Master.Config) extends PersistentActor with ActorLogging {
 
     case w2m.TaskFinished(workerId, taskId, resultEither) =>
       workState.getTaskInProgress(taskId) match {
-        case Some(task) => handleTaskInProgress(workerId, task, resultEither, sender())
+        case Some(task) =>
+          handleTaskInProgress(workerId, task, resultEither, sender())
         case None =>
-          log.info("Task {} finished by worker {} isn't in progress", taskId.id, workerId)
+          log.warning("Task {} finished by worker {} isn't in progress", taskId.id, workerId)
           sender() ! m2w.TaskResultAck(taskId)
       }
     }
@@ -110,7 +111,7 @@ class Master(conf: Master.Config) extends PersistentActor with ActorLogging {
     val event =
       resultEither match {
         case Right(result) =>
-          log.info("Task {} is done by worker {}", task.id, workerId)
+          log.debug("Task {} is done by worker {}", task.id, workerId)
           TaskCompleted(task.id, result)
         case Left(error) =>
           log.error("Task {} crashed in worker {} due to : {}", task.id, workerId, error)
@@ -137,7 +138,7 @@ class Master(conf: Master.Config) extends PersistentActor with ActorLogging {
       if (workState.isAccepted(task.id)) { // idempotent
         s ! m2p.TaskAck(task.id)
       } else {
-        log.info("Accepted task: {}", task.id)
+        log.debug("Accepted task: {}", task.id)
         persist(TaskAccepted(task)) { event =>
           s ! m2p.TaskAck(task.id) // Ack back to original sender
           workState = workState.updated(event)

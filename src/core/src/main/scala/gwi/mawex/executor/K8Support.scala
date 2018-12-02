@@ -56,7 +56,7 @@ trait K8BatchApiSupport extends LazyLogging {
           .withNewTemplate().withNewSpec().withContainers(container).withRestartPolicy("Never").and.and.and
         .build
 
-    logger.info(s"Creating job ${jobName.name} with container name $containerName")
+    logger.debug(s"Creating job ${jobName.name} with container name $containerName")
     batchApi.createNamespacedJob(conf.namespace, job, "true")
   }
 
@@ -67,7 +67,7 @@ trait K8BatchApiSupport extends LazyLogging {
         false
       case Success(response) =>
         val jobExists = response.getStatusCode != 404
-        logger.info(s"Job exists : $jobExists ${getJobStatusConditions(response.getData)}")
+        logger.debug(s"Job exists : $jobExists ${getJobStatusConditions(response.getData)}")
         jobExists
     }
   }

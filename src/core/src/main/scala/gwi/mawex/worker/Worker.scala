@@ -60,7 +60,7 @@ class Worker(masterId: String, clusterClient: ActorRef, workerId: WorkerId, sand
       master_giveMeTask()
 
     case task@Task(id, _) =>
-      log.info("Got task: {}", task)
+      log.debug("Got task: {}", task)
       currentTaskId = Some(id)
       executorSandBox ! task
       context.setReceiveTimeout(taskTimeout)
@@ -69,7 +69,7 @@ class Worker(masterId: String, clusterClient: ActorRef, workerId: WorkerId, sand
 
   private[this] def working: Receive = {
     case TaskResult(taskId, result) =>
-      log.info("Task is complete. Result {}", result)
+      log.debug("Task is complete. Result {}", result)
       master_finishTask(taskId, result)
     case ReceiveTimeout =>
       log.warning("No response from Executor to Worker ...")
@@ -84,7 +84,7 @@ class Worker(masterId: String, clusterClient: ActorRef, workerId: WorkerId, sand
       context.become(idle)
       master_giveMeTask()
     case ReceiveTimeout =>
-      log.info("No ack to Worker from Master, retrying ...")
+      log.warning("No ack to Worker from Master, retrying ...")
       master_finishTask(currentTaskId.get, result)
   }
 

@@ -7,7 +7,7 @@ import scala.concurrent.duration.FiniteDuration
 import scala.sys.process.Process
 import scala.util.{Failure, Success, Try}
 
-object Common {
+protected[mawex] object Common {
   implicit class ThrowablePimp(underlying: Throwable) {
     def messageWithStackTraceToString: String = {
       val sw = new StringWriter
@@ -22,7 +22,7 @@ object Common {
   * Mawex task execution can be forked which is the recommended way for bigger, long running or memory consuming jobs
   * as their execution cannot affect the host JVM which increases the overall resiliency of the system
   */
-object Fork {
+protected[mawex] object Fork {
   def run(className: String, classPath: String, jvmOpts: Option[String], args: List[String]): Process = {
     val command = Seq("java", "-cp", classPath, className) ++ args
     val builder = new ProcessBuilder(command:_*)

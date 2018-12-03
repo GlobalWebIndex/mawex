@@ -107,7 +107,7 @@ class K8JobExecutorSupervisor(val executorConf: K8JobConf) extends ExecutorSuper
       val sandboxRef = sender()
       logger.debug(s"Starting k8s job $jobName")
       context.become(running(attempts, jobName))
-      Future(runJob(jobName, executorConf, executorCmd)) onComplete {
+      runJob(jobName, executorConf, executorCmd) andThen {
         case Success(job) =>
           logger.debug(s"Job $jobName successfully started ${getJobStatusConditions(job)}")
           context.system.scheduler.scheduleOnce(executorConf.checkInterval, self, ExecutorSupervisor.Check(sandboxRef))(Implicits.global)
@@ -119,21 +119,25 @@ class K8JobExecutorSupervisor(val executorConf: K8JobConf) extends ExecutorSuper
 
   def running(attempts: Int, jobName: JobName): Receive = {
     case ExecutorSupervisor.Check(sandboxRef) =>
-      val isRunning = jobExists(jobName, executorConf)
-      if (!isRunning)
-        sandboxRef ! es2s.Crashed
-      else if (attempts >= executorConf.checkLimit)
-        sandboxRef ! es2s.TimedOut
-      else {
-        context.become(running(attempts+1, jobName))
-        context.system.scheduler.scheduleOnce(executorConf.checkInterval, self, ExecutorSupervisor.Check(sandboxRef))(Implicits.global)
+      implicit val scheduler = context.system.scheduler
+      jobExists(jobName, executorConf) andThen {
+        case Success(isRunning) =>
+          if (!isRunning)
+            sandboxRef ! es2s.Crashed
+          else if (attempts >= executorConf.checkLimit)
+            sandboxRef ! es2s.TimedOut
+          else {
+            context.become(running(attempts+1, jobName))
+            context.system.scheduler.scheduleOnce(executorConf.checkInterval, self, ExecutorSupervisor.Check(sandboxRef))(Implicits.global)
+          }
       }
     case s2es.Stop =>
       log.debug(s"Deleting k8s job $jobName")
-      Future(deleteJob(jobName, executorConf)) andThen {
+      implicit val scheduler = context.system.scheduler
+      deleteJob(jobName, executorConf) andThen {
         case Success(status) =>
           log.debug(s"Job $jobName successfully deleted, status: \n$status")
-          Try(context.stop(self))
+          Try(context.stop(self)) // this actor gets stop with job that we are deleting, so it might not exist at the time of running this callback
         case Failure(ex) =>
           log.error(ex, s"Deleting job $jobName failed !!!")
           Try(context.stop(self))

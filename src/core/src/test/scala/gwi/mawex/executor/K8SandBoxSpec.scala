@@ -1,6 +1,9 @@
 package gwi.mawex.executor
 
 import java.io.ByteArrayInputStream
+
+import gwi.mawex.AkkaSupport
+
 import scala.concurrent.duration._
 import io.fabric8.kubernetes.client.{BatchAPIGroupClient, ConfigBuilder}
 import io.kubernetes.client.apis.BatchV1Api
@@ -24,7 +27,7 @@ object K8 {
 }
 
 @Ignore
-class K8SandBoxSpec extends FreeSpecLike with K8BatchApiSupport {
+class K8SandBoxSpec extends FreeSpecLike with K8BatchApiSupport with AkkaSupport {
   private lazy val apiClient =
     Config.fromToken(
       K8.conf.serverApiUrl,
@@ -34,11 +37,12 @@ class K8SandBoxSpec extends FreeSpecLike with K8BatchApiSupport {
   private[this] implicit lazy val batchApi = new BatchV1Api(apiClient)
 
   "k8 client should succeed" in {
-    runJob(JobName("job-test"), K8.conf, ExecutorCmd(List("df", "-h"), None))
+    whenReady(runJob(JobName("job-test"), K8.conf, ExecutorCmd(List("df", "-h"), None))) { createResult =>
+      Thread.sleep(3000)
+      whenReady(deleteJob(JobName("job-test"), K8.conf)) { deleteResult =>
 
-    Thread.sleep(5000)
-
-    deleteJob(JobName("job-test"), K8.conf)
+      }
+    }
   }
 
 }

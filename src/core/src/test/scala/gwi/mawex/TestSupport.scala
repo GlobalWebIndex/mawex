@@ -1,5 +1,13 @@
 package gwi.mawex
 
+import akka.actor.ActorSystem
+import akka.util.Timeout
+import org.scalatest.concurrent.ScalaFutures
+import org.scalatest.{BeforeAndAfterAll, Suite}
+
+import scala.concurrent.ExecutionContext.Implicits
+import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.duration._
 import scala.sys.process.Process
 import scala.util.Try
 
@@ -27,4 +35,15 @@ trait DockerSupport {
     Process(docker(s"stop $name")).run()
     Process(docker(s"rm -fv $name")).run()
   }
+}
+
+trait AkkaSupport extends Suite with ScalaFutures with BeforeAndAfterAll {
+  protected[this] implicit val timeout = Timeout(10.seconds)
+  implicit lazy val system             = ActorSystem(s"AkkaSupportSystem")
+  protected[this] implicit lazy val executionContext = Implicits.global
+  protected[this] implicit lazy val scheduler = system.scheduler
+
+  override def afterAll(): Unit =
+    try super.afterAll()
+    finally Await.ready(Future(system.terminate())(ExecutionContext.global), Duration.Inf)
 }

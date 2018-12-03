@@ -1,6 +1,8 @@
 ## mawex
 
 [![DroneCI](https://drone.globalwebindex.net/api/badges/GlobalWebIndex/mawex/status.svg)](https://drone.globalwebindex.net/GlobalWebIndex/mawex)
+[![mawex-api](https://api.bintray.com/packages/l15k4/GlobalWebIndex/mawex-api/images/download.svg) ](https://bintray.com/l15k4/GlobalWebIndex/mawex-api/_latestVersion)
+[![mawex-core](https://api.bintray.com/packages/l15k4/GlobalWebIndex/mawex-core/images/download.svg) ](https://bintray.com/l15k4/GlobalWebIndex/mawex-core/_latestVersion)
 
 ```
 +-------------------------------------------------------------------------------------+
@@ -137,6 +139,8 @@ $ docker-compose up
 ### how-to ( W.I.P. )
 
 ```
+Resolver.bintrayRepo("l15k4", "GlobalWebIndex")
+
 "net.globalwebindex" %% "mawex-api" % "x.y.z" // In case you want to use mawex remotely via `RemoteMasterProxy`
 "net.globalwebindex" %% "mawex-core" % "x.y.z" // In case you want to use mawex within your actor system programatically via `LocalMasterProxy`, see `./example`
 ```

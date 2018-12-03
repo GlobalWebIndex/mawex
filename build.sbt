@@ -1,16 +1,12 @@
 import Dependencies._
-import Deploy._
-
-lazy val s3Resolver = "S3 Snapshots" at "s3://public.maven.globalwebindex.net.s3-eu-west-1.amazonaws.com/snapshots"
 
 crossScalaVersions in ThisBuild := Seq("2.12.6", "2.11.8")
-organization in ThisBuild := "net.globalwebindex"
 libraryDependencies in ThisBuild ++= clist ++ loggingApi ++ Seq(akkaActor, akkaClusterTools)
 resolvers in ThisBuild ++= Seq(
   "Maven Central Google Mirror EU" at "https://maven-central-eu.storage-download.googleapis.com/repos/central/data/",
   Resolver.bintrayRepo("tanukkii007", "maven"),
-  "dnvriend" at "http://dl.bintray.com/dnvriend/maven",
-  s3Resolver
+  Resolver.bintrayRepo("dnvriend", "maven"),
+  "S3 Snapshots" at "s3://public.maven.globalwebindex.net.s3-eu-west-1.amazonaws.com/snapshots" // TODO this is because of akka-kryo-serialization
 )
 version in ThisBuild ~= (_.replace('+', '-'))
 dynver in ThisBuild ~= (_.replace('+', '-'))
@@ -20,7 +16,7 @@ stage in (ThisBuild, Docker) := null
 publishConfiguration in ThisBuild := publishConfiguration.value.withOverwrite(true)
 
 lazy val `mawex-api` = (project in file("src/api"))
-  .settings(publishSettings("globalWebIndex", "mawex-api", s3Resolver))
+  .settings(Deploy.publishSettings("mawex"))
 
 lazy val `mawex-core` = (project in file("src/core"))
   .enablePlugins(DockerPlugin, SmallerDockerPlugin, JavaAppPackaging)
@@ -30,7 +26,7 @@ lazy val `mawex-core` = (project in file("src/core"))
       akkaCluster, akkaPersistence, akkaPersistenceQuery, akkaKryoSerialization, akkaClusterCustomDowning,
       fabric8JavaClient, k8sJavaClient, loggingImplLogback, akkaPersistenceInMemory % "test", akkaTestkit, scalatest
     )
-  ).settings(publishSettings("globalWebIndex", "mawex-core", s3Resolver))
+  ).settings(Deploy.publishSettings("mawex"))
   .settings(Deploy.settings("gwiq", "mawex-core", "gwi.mawex.Launcher"))
   .dependsOn(`mawex-api` % "compile->compile;test->test")
 

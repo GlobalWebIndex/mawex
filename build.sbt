@@ -7,7 +7,7 @@ resolvers in ThisBuild ++= Seq(
   "Maven Central Google Mirror EU" at "https://maven-central-eu.storage-download.googleapis.com/repos/central/data/",
   Resolver.bintrayRepo("tanukkii007", "maven"),
   Resolver.bintrayRepo("dnvriend", "maven"),
-  "S3 Snapshots" at "s3://public.maven.globalwebindex.net.s3-eu-west-1.amazonaws.com/snapshots" // TODO this is because of akka-kryo-serialization
+  Resolver.bintrayRepo("l15k4", "GlobalWebIndex")
 )
 version in ThisBuild ~= (_.replace('+', '-'))
 dynver in ThisBuild ~= (_.replace('+', '-'))

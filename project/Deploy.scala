@@ -33,7 +33,6 @@ object Deploy {
     publishArtifact in Test := false,
     organization := "net.globalwebindex",
     homepage := Some(url(s"https://github.com/GlobalWebIndex/$ghProjectName/blob/master/README.md")),
-    licenses += ("MIT", url("http://opensource.org/licenses/MIT")),
     developers += Developer("l15k4", "Jakub Liska", "liska.jakub@gmail.com", url("https://github.com/l15k4")),
     scmInfo := Some(ScmInfo(url(s"https://github.com/GlobalWebIndex/$ghProjectName"), s"git@github.com:GlobalWebIndex/$ghProjectName.git")),
     bintrayVcsUrl := Some(s"git@github.com:GlobalWebIndex/$ghProjectName.git"),

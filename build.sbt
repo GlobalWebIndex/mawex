@@ -32,7 +32,6 @@ lazy val `mawex-core` = (project in file("src/core"))
 
 lazy val `mawex-example` = (project in file("src/example"))
   .enablePlugins(DockerPlugin, SmallerDockerPlugin, JavaAppPackaging)
-  .disablePlugins(BintrayPlugin)
   .settings(version := "latest")
   .settings(libraryDependencies ++= Seq(akkaCluster, akkaPersistence, akkaPersistenceInMemory, loggingImplLogback))
   .settings(Deploy.settings("gwiq", "mawex-example", "gwi.mawex.ExampleLauncher"))

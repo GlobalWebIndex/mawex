@@ -34,7 +34,7 @@ pipeline:
   publish-artifacts-and-stage-image:
     image: gwiq/sbt-docker:latest
     commands:
-      - sbt -mem 1024 -Djline.terminal=off -Dcoursier.cache=./.coursier -Dsbt.ivy.home=./.ivy2 -Dfile.encoding=utf-8 mawex-api/publish mawex-core/publish mawex-example/docker:stage
+      - sbt -mem 1024 -Djline.terminal=off -Dcoursier.cache=./.coursier -Dsbt.ivy.home=./.ivy2 -Dfile.encoding=utf-8 mawex-api/publish mawex-core/publish mawex-core/docker:stage
     secrets:
       - source: bintray_user
         target: bintray_user

@@ -2,7 +2,6 @@ import Dependencies._
 
 crossScalaVersions in ThisBuild := Seq("2.12.6", "2.11.8")
 libraryDependencies in ThisBuild ++= clist ++ loggingApi ++ Seq(akkaActor, akkaClusterTools)
-licenses in ThisBuild += ("MIT", url("http://opensource.org/licenses/MIT"))
 resolvers in ThisBuild ++= Seq(
   "Maven Central Google Mirror EU" at "https://maven-central-eu.storage-download.googleapis.com/repos/central/data/",
   Resolver.bintrayRepo("tanukkii007", "maven"),

@@ -1,4 +1,5 @@
 import Dependencies._
+import Deploy._
 
 crossScalaVersions in ThisBuild := Seq("2.12.6", "2.11.8")
 libraryDependencies in ThisBuild ++= clist ++ loggingApi ++ Seq(akkaActor, akkaClusterTools)
@@ -16,7 +17,7 @@ stage in (ThisBuild, Docker) := null
 publishConfiguration in ThisBuild := publishConfiguration.value.withOverwrite(true)
 
 lazy val `mawex-api` = (project in file("src/api"))
-  .settings(Deploy.publishSettings("mawex"))
+  .settings(bintraySettings("GlobalWebIndex", "mawex"))
 
 lazy val `mawex-core` = (project in file("src/core"))
   .enablePlugins(DockerPlugin, SmallerDockerPlugin, JavaAppPackaging)
@@ -26,7 +27,7 @@ lazy val `mawex-core` = (project in file("src/core"))
       akkaCluster, akkaPersistence, akkaPersistenceQuery, akkaKryoSerialization, akkaClusterCustomDowning,
       fabric8JavaClient, k8sJavaClient, loggingImplLogback, akkaPersistenceInMemory % "test", akkaTestkit, scalatest
     )
-  ).settings(Deploy.publishSettings("mawex"))
+  ).settings(bintraySettings("GlobalWebIndex", "mawex"))
   .settings(Deploy.settings("gwiq", "mawex-core", "gwi.mawex.Launcher"))
   .dependsOn(`mawex-api` % "compile->compile;test->test")
 

@@ -28,11 +28,7 @@ pipeline:
     image: gwiq/sbt-docker:latest
     commands:
       - sbt -mem 1024 -Djline.terminal=off -Dcoursier.cache=./.coursier -Dsbt.ivy.home=./.ivy2 -Dfile.encoding=utf-8 mawex-api/publish mawex-core/publish mawex-core/docker:stage
-    secrets:
-      - source: bintray_user
-        target: bintray_user
-      - source: bintray_pass
-        target: bintray_pass
+    secrets: [ bintray_user, bintray_pass ]
     when:
       event: [deployment, tag]
 
@@ -46,6 +42,7 @@ pipeline:
       - /tmp/cache:/cache
     when:
       event: [push, deployment, tag]
+      status: [ failure, success ]
 
   build-on-deploy:
     image: docker:stable
@@ -54,11 +51,7 @@ pipeline:
       - /root/.docker:/root/.docker
     environment:
       - IMAGE_NAME=gwiq/mawex-core
-    secrets:
-      - source: docker_user
-        target: docker_user
-      - source: docker_password
-        target: docker_password
+    secrets: [ docker_user, docker_password ]
     commands:
       - docker build -t local/mawex-core:$DRONE_COMMIT_SHA ./src/core/target/docker/stage
       - docker login -u "$DOCKER_USER" -p "$DOCKER_PASSWORD"
@@ -75,11 +68,7 @@ pipeline:
     environment:
       - IMAGE_NAME=gwiq/mawex-core
       - RELEASE=${DRONE_TAG##v}
-    secrets:
-      - source: docker_user
-        target: docker_user
-      - source: docker_password
-        target: docker_password
+    secrets: [ docker_user, docker_password ]
     commands:
       - docker build -t local/mawex-core:$RELEASE ./src/core/target/docker/stage
       - docker login -u "$DOCKER_USER" -p "$DOCKER_PASSWORD"

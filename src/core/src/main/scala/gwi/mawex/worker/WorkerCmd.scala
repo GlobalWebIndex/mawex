@@ -1,5 +1,7 @@
 package gwi.mawex.worker
 
+import java.io.File
+
 import akka.actor.{ActorRef, ActorSystem, Address, AddressFromURIString, Props, RootActorPath}
 import akka.cluster.client.{ClusterClient, ClusterClientSettings}
 import com.typesafe.scalalogging.LazyLogging
@@ -13,6 +15,7 @@ import scala.concurrent.{Await, ExecutionContext}
 
 object WorkerCmd extends Command(name = "workers", description = "launches workers") with ClusterService with LazyLogging {
 
+  var appConfPath                   = opt[String](name="app-conf-path", default = "etc/application.conf", description = "path of externally provided application.conf")
   var consumerGroups                = opt[List[String]](useEnv = true, default = List("default"), description = "sum,add,divide - 3 workers in 3 consumer groups")
   var pod                           = opt[String](useEnv = true, default = "default", description = "Workers within the same pod are executing sequentially")
   var masterId                      = opt[String](useEnv = true, default = "master", name="master-id")
@@ -76,11 +79,13 @@ object WorkerCmd extends Command(name = "workers", description = "launches worke
   }
 
   def run(): Unit = {
+    val appConfPathOpt = Option(new File(appConfPath)).filter(_.exists)
+    appConfPathOpt.foreach( f => logger.debug(s"App configuration loaded from ${f.getAbsolutePath}") )
     val commandArgSeq = commandBuilderArgs.map(_.split(" ").filter(_.nonEmpty).toSeq).getOrElse(Seq.empty)
     val commandOpt = commandBuilderClass.map( className => buildCommand(Class.forName(className), commandArgSeq) )
     val executorClazz = Class.forName(executorClass)
     val executorProps = commandOpt.fold(Props(executorClazz))(cmd => Props(executorClazz, cmd))
-    val system = RemoteService.buildRemoteSystem(Address("akka.tcp", Worker.SystemName, Some(hostAddress.host), Some(hostAddress.port)))
+    val system = RemoteService.buildRemoteSystem(Address("akka.tcp", Worker.SystemName, Some(hostAddress.host), Some(hostAddress.port)), appConfPathOpt)
     val clusterClient = workerClusterClient(seedNodes, system)
     consumerGroups.foreach { consumerGroup =>
       workerActorRef(

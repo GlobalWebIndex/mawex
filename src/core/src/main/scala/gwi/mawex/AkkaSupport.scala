@@ -1,5 +1,7 @@
 package gwi.mawex
 
+import java.io.File
+
 import akka.actor._
 import akka.cluster.singleton.{ClusterSingletonManager, ClusterSingletonManagerSettings}
 import com.typesafe.config.{ConfigFactory, ConfigValueFactory}
@@ -27,24 +29,16 @@ protected[mawex] sealed trait RemoteService extends MawexService { this: Command
 object RemoteService {
   case class HostAddress(host: String, port: Int)
 
-  def buildRemoteSystem(address: Address) =
+  def buildRemoteSystem(address: Address, appConfFileOpt: Option[File]) =
     ActorSystem(
       address.system,
-      ConfigFactory.parseString(
-        s"""
-        akka {
-          actor.provider = "remote"
-          remote {
-            enabled-transports = ["akka.remote.netty.tcp"]
-            netty.tcp {
-              hostname = ${address.host.getOrElse("localhost")}
-              port = ${address.port.getOrElse(0)}
-              bind-hostname = "0.0.0.0"
-            }
-          }
-        }
-        """.stripMargin
-      ).withFallback(ConfigFactory.parseResources("serialization.conf"))
+      appConfFileOpt
+        .map(ConfigFactory.parseFile)
+        .getOrElse(ConfigFactory.empty())
+        .withValue("akka.remote.netty.tcp.hostname", ConfigValueFactory.fromAnyRef(address.host.getOrElse("localhost")))
+        .withValue("akka.remote.netty.tcp.port", ConfigValueFactory.fromAnyRef(address.port.getOrElse(0)))
+        .withFallback(ConfigFactory.parseResources("serialization.conf"))
+        .withFallback(ConfigFactory.parseResources("worker.conf"))
         .withFallback(ConfigFactory.load())
     )
 }
@@ -64,36 +58,18 @@ protected[mawex] trait ClusterService extends RemoteService { this: Command =>
 
 object ClusterService {
 
-  def buildClusterSystem(hostAddress: HostAddress, seedNodes: List[HostAddress], memberSize: Int) =
+  def buildClusterSystem(hostAddress: HostAddress, seedNodes: List[HostAddress], memberSize: Int, appConfFileOpt: Option[File]) =
     ActorSystem(
       "ClusterSystem",
-      ConfigFactory.parseString(
-        s"""
-          akka {
-            actor.provider = "cluster"
-            cluster {
-              downing-provider-class = "tanukki.akka.cluster.autodown.OldestAutoDowning"
-              roles = [backend]
-              min-nr-of-members = $memberSize
-            }
-            extensions = ["akka.cluster.client.ClusterClientReceptionist", "akka.cluster.pubsub.DistributedPubSub", "com.romix.akka.serialization.kryo.KryoSerializationExtension$$"]
-            remote.netty.tcp {
-               hostname = ${hostAddress.host}
-               port = ${hostAddress.port}
-               bind-hostname = "0.0.0.0"
-            }
-          }
-          custom-downing {
-            stable-after = 20s
-            shutdown-actor-system-on-resolution = true
-            oldest-auto-downing {
-              oldest-member-role = "backend"
-              down-if-alone = true
-            }
-          }
-          """.stripMargin
-      ).withValue("akka.cluster.seed-nodes", ConfigValueFactory.fromIterable(seedNodes.map { case HostAddress(host, port) => s"akka.tcp://ClusterSystem@$host:$port" }.asJava))
+      appConfFileOpt
+        .map(ConfigFactory.parseFile)
+        .getOrElse(ConfigFactory.empty())
+        .withValue("akka.cluster.seed-nodes", ConfigValueFactory.fromIterable(seedNodes.map { case HostAddress(host, port) => s"akka.tcp://ClusterSystem@$host:$port" }.asJava))
+        .withValue("akka.cluster.min-nr-of-members", ConfigValueFactory.fromAnyRef(memberSize))
+        .withValue("akka.remote.netty.tcp.hostname", ConfigValueFactory.fromAnyRef(hostAddress.host))
+        .withValue("akka.remote.netty.tcp.port", ConfigValueFactory.fromAnyRef(hostAddress.port))
         .withFallback(ConfigFactory.parseResources("serialization.conf"))
+        .withFallback(ConfigFactory.parseResources("master.conf"))
         .withFallback(ConfigFactory.load())
     )
 

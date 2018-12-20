@@ -24,13 +24,13 @@ import scala.concurrent.{Await, Future}
 import scala.util.{Failure, Success, Try}
 
 class LocalMawexSpec(_system: ActorSystem) extends AbstractMawexSpec(_system: ActorSystem) {
-  def this() = this(ClusterService.buildClusterSystem(HostAddress("localhost", 0), List.empty, 1))
+  def this() = this(ClusterService.buildClusterSystem(HostAddress("localhost", 0), List.empty, 1, Option.empty))
   protected def executorProps(underlyingProps: Props): Props = SandBox.localJvmProps(underlyingProps)
   protected def singleMsgTimeout: FiniteDuration = 1.second
 }
 
 class ForkedMawexSpec(_system: ActorSystem) extends AbstractMawexSpec(_system: ActorSystem) {
-  def this() = this(ClusterService.buildClusterSystem(HostAddress("localhost", 0), List.empty, 1))
+  def this() = this(ClusterService.buildClusterSystem(HostAddress("localhost", 0), List.empty, 1, Option.empty))
   protected def executorProps(underlyingProps: Props): Props = SandBox.forkingProps(underlyingProps, ForkedJvmConf(System.getProperty("java.class.path"), 60.minute, 1), ExecutorCmd(Some(jvmOpts)))
   protected def singleMsgTimeout: FiniteDuration = 4.seconds
 }

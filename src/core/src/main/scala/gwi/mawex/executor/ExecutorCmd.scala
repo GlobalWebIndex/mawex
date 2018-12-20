@@ -1,5 +1,7 @@
 package gwi.mawex.executor
 
+import java.io.File
+
 import akka.actor.{Actor, ActorLogging, ActorRef, ActorSelection, Address, AddressFromURIString, Props, ReceiveTimeout}
 import com.typesafe.scalalogging.LazyLogging
 import gwi.mawex.{MawexService, RemoteService, e2s, s2e}
@@ -17,12 +19,15 @@ object ExecutorCmd extends Command(name = "executor", description = "launches ex
   val ActorName   = "Executor"
   val SystemName  = "ExecutorSystem"
 
-  var sandboxActorPath = opt[Option[String]](name="sandbox-actor-path", description = "Serialization.serializedActorPath")
+  var appConfPath       = opt[String](name="app-conf-path", default = "etc/application.conf", description = "path of externally provided application.conf")
+  var sandboxActorPath  = opt[Option[String]](name="sandbox-actor-path", description = "Serialization.serializedActorPath")
 
   private def startAndRegisterExecutorToSandBox(): Unit = {
     require(sandboxActorPath.isDefined, s"Please supply sandbox-actor-path parameter !!!")
+    val appConfPathOpt = Option(new File(appConfPath)).filter(_.exists)
     logger.debug(s"Starting executor and connecting to ${sandboxActorPath.get}")
-    val executorSystem = RemoteService.buildRemoteSystem(Address("akka.tcp", SystemName, AddressFromURIString(sandboxActorPath.get).host.get, 0))
+    appConfPathOpt.foreach( f => logger.debug(s"App configuration loaded from ${f.getAbsolutePath}") )
+    val executorSystem = RemoteService.buildRemoteSystem(Address("akka.tcp", SystemName, AddressFromURIString(sandboxActorPath.get).host.get, 0), appConfPathOpt)
     executorSystem.actorOf(Props(classOf[SandboxFrontDesk], executorSystem.actorSelection(sandboxActorPath.get)))
     executorSystem.whenTerminated.onComplete { _ =>
       logger.debug("Remote Actor System just shut down, exiting jvm process !!!")

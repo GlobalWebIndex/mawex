@@ -5,6 +5,7 @@ import java.io.File
 import akka.actor._
 import akka.cluster.singleton.{ClusterSingletonManager, ClusterSingletonManagerSettings}
 import com.typesafe.config.{ConfigFactory, ConfigValueFactory}
+import com.typesafe.scalalogging.LazyLogging
 import gwi.mawex.RemoteService._
 import gwi.mawex.master._
 import org.backuity.clist._
@@ -41,6 +42,19 @@ object RemoteService {
         .withFallback(ConfigFactory.parseResources("worker.conf"))
         .withFallback(ConfigFactory.load())
     )
+}
+
+protected[mawex] trait MountingService extends LazyLogging { this: Command =>
+  var mountPath      = opt[Option[String]](useEnv = true, name="mount-path", description = "mount path to pass files to executor")
+
+  protected def getAppConf: Option[File] = {
+    val appConfOpt = mountPath.map { path =>
+      val properPath = if (path.endsWith("/")) path else path + "/"
+      new File(s"${properPath}application.conf")
+    }.filter(_.exists)
+    appConfOpt.foreach(f => logger.debug(s"App configuration loaded from ${f.getAbsolutePath}") )
+    appConfOpt
+  }
 }
 
 protected[mawex] trait ClusterService extends RemoteService { this: Command =>

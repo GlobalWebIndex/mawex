@@ -102,7 +102,7 @@ class K8JobExecutorSupervisor(val executorConf: K8JobConf) extends ExecutorSuper
   override def receive: Receive = idle(0)
 
   def idle(attempts: Int): Receive = {
-    case s2es.Start(taskId, executorCmd) =>
+    case s2es.Start(taskId, executorCmd: K8sExecutorCmd) =>
       val jobName = JobName(taskId)
       val sandboxRef = sender()
       logger.debug(s"Starting k8s job $jobName")

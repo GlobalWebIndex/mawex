@@ -1,7 +1,5 @@
 package gwi.mawex.worker
 
-import java.io.File
-
 import akka.actor.{ActorRef, ActorSystem, Address, AddressFromURIString, Props, RootActorPath}
 import akka.cluster.client.{ClusterClient, ClusterClientSettings}
 import com.typesafe.scalalogging.LazyLogging
@@ -13,9 +11,9 @@ import org.backuity.clist.{Cli, Command, arg, opt}
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext}
 
-object WorkerCmd extends Command(name = "workers", description = "launches workers") with ClusterService with LazyLogging {
+object WorkerCmd extends Command(name = "workers", description = "launches workers") with ClusterService with MountingService with LazyLogging {
 
-  var appConfPath                   = opt[String](name="app-conf-path", default = "etc/application.conf", description = "path of externally provided application.conf")
+  var configMapName                 = opt[Option[String]](useEnv = true, name="config-map-name", description = "Name of the config map that holds files to mount")
   var consumerGroups                = opt[List[String]](useEnv = true, default = List("default"), description = "sum,add,divide - 3 workers in 3 consumer groups")
   var pod                           = opt[String](useEnv = true, default = "default", description = "Workers within the same pod are executing sequentially")
   var masterId                      = opt[String](useEnv = true, default = "master", name="master-id")
@@ -69,23 +67,29 @@ object WorkerCmd extends Command(name = "workers", description = "launches worke
       SandBox.localJvmProps(executorProps)
     case "forked" =>
       logger.info(s"Forked mode enabled on worker")
-      SandBox.forkingProps(executorProps, ForkedJvmConf(forkedJvmClassPath, sandboxCheckInterval.seconds, sandboxCheckLimit), ExecutorCmd(sandboxJvmOpts))
+      SandBox.forkingProps(
+        executorProps,
+        ForkedJvmConf(forkedJvmClassPath, sandboxCheckInterval.seconds, sandboxCheckLimit),
+        ExecutorCmd.forkedCmd(sandboxJvmOpts, mountPath)
+      )
     case "k8s" =>
       logger.info(s"K8s mode enabled on worker")
       val k8Image = k8sDockerImage.getOrElse(throw new IllegalArgumentException("k8sDockerImage not specified !!!"))
-      SandBox.k8JobProps(executorProps, K8JobConf(k8Image, k8sNamespace, getExecutorResources, k8sClientDebugMode, sandboxCheckInterval.seconds, sandboxCheckLimit), ExecutorCmd(sandboxJvmOpts))
+      SandBox.k8JobProps(
+        executorProps,
+        K8JobConf(k8Image, k8sNamespace, getExecutorResources, k8sClientDebugMode, sandboxCheckInterval.seconds, sandboxCheckLimit),
+        ExecutorCmd.k8sCmd(sandboxJvmOpts, mountPath, configMapName)
+      )
     case x =>
       throw new IllegalArgumentException(s"Executor type $x is not valid, please choose between local / forked / k8s")
   }
 
   def run(): Unit = {
-    val appConfPathOpt = Option(new File(appConfPath)).filter(_.exists)
-    appConfPathOpt.foreach( f => logger.debug(s"App configuration loaded from ${f.getAbsolutePath}") )
     val commandArgSeq = commandBuilderArgs.map(_.split(" ").filter(_.nonEmpty).toSeq).getOrElse(Seq.empty)
     val commandOpt = commandBuilderClass.map( className => buildCommand(Class.forName(className), commandArgSeq) )
     val executorClazz = Class.forName(executorClass)
     val executorProps = commandOpt.fold(Props(executorClazz))(cmd => Props(executorClazz, cmd))
-    val system = RemoteService.buildRemoteSystem(Address("akka.tcp", Worker.SystemName, Some(hostAddress.host), Some(hostAddress.port)), appConfPathOpt)
+    val system = RemoteService.buildRemoteSystem(Address("akka.tcp", Worker.SystemName, Some(hostAddress.host), Some(hostAddress.port)), getAppConf)
     val clusterClient = workerClusterClient(seedNodes, system)
     consumerGroups.foreach { consumerGroup =>
       workerActorRef(

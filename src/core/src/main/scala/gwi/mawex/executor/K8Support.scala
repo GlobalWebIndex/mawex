@@ -39,12 +39,26 @@ trait K8BatchApiSupport extends LazyLogging {
   protected[mawex] def getJobStatusConditions(job: V1Job): String =
     Option(job.getStatus.getConditions).map(_.asScala.map( c => s"${c.getType} ${c.getStatus}").mkString("\n","\n","\n")).getOrElse("")
 
-  protected[mawex] def runJob(jobName: JobName, conf: K8JobConf, executorCmd: ExecutorCmd)(implicit batchApi: BatchV1Api, ioEC: ExecutionContext): Future[V1Job] = {
+  protected[mawex] def runJob(jobName: JobName, conf: K8JobConf, executorCmd: K8sExecutorCmd)(implicit batchApi: BatchV1Api, ioEC: ExecutionContext): Future[V1Job] = {
     val envVarsMap = sys.env ++ executorCmd.jvmOpts.map(opt => Map("JAVA_TOOL_OPTIONS" -> opt) ).getOrElse(Map.empty)
     val envVars =
       envVarsMap.foldLeft(List.empty[V1EnvVar]) { case (acc, (k,v)) =>
         new V1EnvVarBuilder().withName(k).withValue(v).build() :: acc
       }.asJava
+
+    val volumeName = "app-conf"
+    val volumes =
+      executorCmd.configMapName.map { confMapName =>
+        new V1VolumeBuilder(true)
+          .withName(volumeName)
+          .withNewConfigMap().withName(confMapName).and()
+          .build()
+      }.toList.asJava
+
+    val volumeMounts =
+      executorCmd.mountPathOpt.map { mountPath =>
+        new V1VolumeMountBuilder(true).withName(volumeName).withMountPath(mountPath).build()
+      }.toList.asJava
 
     val containerName = conf.image.trim.split('/').last.split(':').head
 
@@ -60,6 +74,7 @@ trait K8BatchApiSupport extends LazyLogging {
           .addToRequests("memory", new Quantity(conf.k8Resources.requestsMemory))
           .addToRequests("cpu", new Quantity(conf.k8Resources.requestsCpu))
         .endResources()
+        .withVolumeMounts(volumeMounts)
         .build
 
     val job =
@@ -68,7 +83,9 @@ trait K8BatchApiSupport extends LazyLogging {
         .withNamespace(conf.namespace).and
         .withNewSpec()
           .withActiveDeadlineSeconds(3600L)
-          .withNewTemplate().withNewSpec().withContainers(container).withRestartPolicy("Never").and.and.and
+          .withNewTemplate().withNewSpec()
+            .withVolumes(volumes)
+            .withContainers(container).withRestartPolicy("Never").and.and.and
         .build
 
     logger.debug(s"Creating job ${jobName.name} with container name $containerName")
@@ -113,7 +130,7 @@ trait K8BatchApiSupport extends LazyLogging {
 @Deprecated
 trait Fabric8BatchApiSupport {
 
-  protected[mawex] def runJob(jobName: JobName, conf: K8JobConf, executorCmd: ExecutorCmd)(implicit batchApi: BatchAPIGroupClient): Job = {
+  protected[mawex] def runJob(jobName: JobName, conf: K8JobConf, executorCmd: K8sExecutorCmd)(implicit batchApi: BatchAPIGroupClient): Job = {
     import io.fabric8.kubernetes.api.model.Quantity
     val envVarsMap = sys.env ++ executorCmd.jvmOpts.map(opt => Map("JAVA_TOOL_OPTIONS" -> opt) ).getOrElse(Map.empty)
     val envVars =

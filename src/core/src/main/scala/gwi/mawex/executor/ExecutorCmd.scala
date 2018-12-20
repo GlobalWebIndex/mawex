@@ -1,33 +1,40 @@
 package gwi.mawex.executor
 
-import java.io.File
-
 import akka.actor.{Actor, ActorLogging, ActorRef, ActorSelection, Address, AddressFromURIString, Props, ReceiveTimeout}
 import com.typesafe.scalalogging.LazyLogging
-import gwi.mawex.{MawexService, RemoteService, e2s, s2e}
+import gwi.mawex._
 import org.backuity.clist.{Command, opt}
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
-case class ExecutorCmd(commands: List[String], jvmOpts: Option[String] = None) {
-  def activate(sandBoxSerializedActorPath: String): ExecutorCmd =
+sealed trait ExecutorCmd {
+  def commands: List[String]
+  def jvmOpts: Option[String]
+  def mountPathOpt: Option[String]
+  def activate(sandBoxSerializedActorPath: String): ExecutorCmd
+}
+
+case class ForkedExecutorCmd(commands: List[String], jvmOpts: Option[String], mountPathOpt: Option[String]) extends ExecutorCmd {
+  def activate(sandBoxSerializedActorPath: String): ForkedExecutorCmd =
     copy(commands = commands :+ s"--sandbox-actor-path=$sandBoxSerializedActorPath")
 }
 
-object ExecutorCmd extends Command(name = "executor", description = "launches executor") with MawexService with LazyLogging {
+case class K8sExecutorCmd(commands: List[String], jvmOpts: Option[String], mountPathOpt: Option[String], configMapName: Option[String]) extends ExecutorCmd {
+  def activate(sandBoxSerializedActorPath: String): K8sExecutorCmd =
+    copy(commands = commands :+ s"--sandbox-actor-path=$sandBoxSerializedActorPath")
+}
+
+object ExecutorCmd extends Command(name = "executor", description = "launches executor") with MawexService with MountingService with LazyLogging {
   val ActorName   = "Executor"
   val SystemName  = "ExecutorSystem"
 
-  var appConfPath       = opt[String](name="app-conf-path", default = "etc/application.conf", description = "path of externally provided application.conf")
-  var sandboxActorPath  = opt[Option[String]](name="sandbox-actor-path", description = "Serialization.serializedActorPath")
+  var sandboxActorPath      = opt[Option[String]](name="sandbox-actor-path", description = "Serialization.serializedActorPath")
 
   private def startAndRegisterExecutorToSandBox(): Unit = {
     require(sandboxActorPath.isDefined, s"Please supply sandbox-actor-path parameter !!!")
-    val appConfPathOpt = Option(new File(appConfPath)).filter(_.exists)
     logger.debug(s"Starting executor and connecting to ${sandboxActorPath.get}")
-    appConfPathOpt.foreach( f => logger.debug(s"App configuration loaded from ${f.getAbsolutePath}") )
-    val executorSystem = RemoteService.buildRemoteSystem(Address("akka.tcp", SystemName, AddressFromURIString(sandboxActorPath.get).host.get, 0), appConfPathOpt)
+    val executorSystem = RemoteService.buildRemoteSystem(Address("akka.tcp", SystemName, AddressFromURIString(sandboxActorPath.get).host.get, 0), getAppConf)
     executorSystem.actorOf(Props(classOf[SandboxFrontDesk], executorSystem.actorSelection(sandboxActorPath.get)))
     executorSystem.whenTerminated.onComplete { _ =>
       logger.debug("Remote Actor System just shut down, exiting jvm process !!!")
@@ -38,8 +45,11 @@ object ExecutorCmd extends Command(name = "executor", description = "launches ex
 
   def run(): Unit = startAndRegisterExecutorToSandBox()
 
-  def apply(jvmOpts: Option[String]): ExecutorCmd =
-    ExecutorCmd(List("executor"), jvmOpts)
+  def forkedCmd(jvmOpts: Option[String], mountPath: Option[String]): ForkedExecutorCmd =
+    ForkedExecutorCmd(List("executor") ++ mountPath.map(mp => s"--mount-path=$mp" ), jvmOpts, mountPath)
+
+  def k8sCmd(jvmOpts: Option[String], mountPath: Option[String], configMapName: Option[String]): K8sExecutorCmd =
+    K8sExecutorCmd(List("executor") ++ mountPath.map(mp => s"--mount-path=$mp" ), jvmOpts, mountPath, configMapName)
 }
 
 class SandboxFrontDesk(sandbox: ActorSelection) extends Actor with ActorLogging {

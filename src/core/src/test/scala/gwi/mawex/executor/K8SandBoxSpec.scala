@@ -37,7 +37,7 @@ class K8SandBoxSpec extends FreeSpecLike with K8BatchApiSupport with AkkaSupport
   private[this] implicit lazy val batchApi = new BatchV1Api(apiClient)
 
   "k8 client should succeed" in {
-    whenReady(runJob(JobName("job-test"), K8.conf, ExecutorCmd(List("df", "-h"), None))) { createResult =>
+    whenReady(runJob(JobName("job-test"), K8.conf, K8sExecutorCmd(List("df", "-h"), None, None, None))) { createResult =>
       Thread.sleep(3000)
       whenReady(deleteJob(JobName("job-test"), K8.conf)) { deleteResult =>
 
@@ -62,7 +62,7 @@ class Fabric8SandBoxSpec extends FreeSpecLike with Fabric8BatchApiSupport {
   implicit lazy val apiClient = new BatchAPIGroupClient(httpClient, config)
 
   "fabricate client should succeed" in {
-    println(runJob(JobName("job-test"), conf, ExecutorCmd(List("df", "-h"), None)))
+    println(runJob(JobName("job-test"), conf, K8sExecutorCmd(List("df", "-h"), None, None, None)))
 
     Thread.sleep(5000)
 

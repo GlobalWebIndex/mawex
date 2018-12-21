@@ -44,7 +44,7 @@ object RemoteService {
     )
 }
 
-protected[mawex] trait MountingService extends LazyLogging { this: Command =>
+trait MountingService extends LazyLogging { this: Command =>
   var mountPath      = opt[Option[String]](useEnv = true, name="mount-path", description = "mount path to pass files to executor")
 
   protected def getMountPath: Option[String] =

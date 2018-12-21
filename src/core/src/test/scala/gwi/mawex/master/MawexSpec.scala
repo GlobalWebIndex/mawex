@@ -26,7 +26,7 @@ import scala.util.{Failure, Success, Try}
 class LocalMawexSpec(_system: ActorSystem) extends AbstractMawexSpec(_system: ActorSystem) {
   def this() = this(ClusterService.buildClusterSystem(HostAddress("localhost", 0), List.empty, 1, Option.empty))
   protected def executorProps(underlyingProps: Props): Props = SandBox.localJvmProps(underlyingProps)
-  protected def singleMsgTimeout: FiniteDuration = 1.second
+  protected def singleMsgTimeout: FiniteDuration = 2.second
 }
 
 class ForkedMawexSpec(_system: ActorSystem) extends AbstractMawexSpec(_system: ActorSystem) {

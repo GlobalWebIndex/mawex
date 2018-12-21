@@ -70,7 +70,7 @@ object WorkerCmd extends Command(name = "workers", description = "launches worke
       SandBox.forkingProps(
         executorProps,
         ForkedJvmConf(forkedJvmClassPath, sandboxCheckInterval.seconds, sandboxCheckLimit),
-        ExecutorCmd.forkedCmd(sandboxJvmOpts, mountPath)
+        ExecutorCmd.forkedCmd(sandboxJvmOpts, getMountPath)
       )
     case "k8s" =>
       logger.info(s"K8s mode enabled on worker")
@@ -78,7 +78,7 @@ object WorkerCmd extends Command(name = "workers", description = "launches worke
       SandBox.k8JobProps(
         executorProps,
         K8JobConf(k8Image, k8sNamespace, getExecutorResources, k8sClientDebugMode, sandboxCheckInterval.seconds, sandboxCheckLimit),
-        ExecutorCmd.k8sCmd(sandboxJvmOpts, mountPath, configMapName)
+        ExecutorCmd.k8sCmd(sandboxJvmOpts, getMountPath, configMapName)
       )
     case x =>
       throw new IllegalArgumentException(s"Executor type $x is not valid, please choose between local / forked / k8s")

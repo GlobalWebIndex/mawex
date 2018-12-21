@@ -47,10 +47,12 @@ object RemoteService {
 protected[mawex] trait MountingService extends LazyLogging { this: Command =>
   var mountPath      = opt[Option[String]](useEnv = true, name="mount-path", description = "mount path to pass files to executor")
 
+  protected def getMountPath: Option[String] =
+    mountPath.map( path => if (path.endsWith("/")) path else path + "/" )
+
   protected def getAppConf: Option[File] = {
-    val appConfOpt = mountPath.map { path =>
-      val properPath = if (path.endsWith("/")) path else path + "/"
-      new File(s"${properPath}application.conf")
+    val appConfOpt = getMountPath.map { path =>
+      new File(s"${path}application.conf")
     }.filter(_.exists)
     appConfOpt.foreach(f => logger.debug(s"App configuration loaded from ${f.getAbsolutePath}") )
     appConfOpt

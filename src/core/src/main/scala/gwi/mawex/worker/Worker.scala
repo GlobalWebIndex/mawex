@@ -73,7 +73,6 @@ class Worker(masterId: String, clusterClient: ActorRef, workerId: WorkerId, sand
       master_finishTask(taskId, result)
     case ReceiveTimeout =>
       log.warning("No response from Executor to Worker ...")
-      executorSandBox ! Kill
       master_finishTask(currentTaskId.get, Left(s"Task $currentTaskId timed out in worker $workerId ..."))
   }
 

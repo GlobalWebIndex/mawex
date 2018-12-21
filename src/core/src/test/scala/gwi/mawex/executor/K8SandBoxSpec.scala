@@ -9,6 +9,7 @@ import io.fabric8.kubernetes.client.{BatchAPIGroupClient, ConfigBuilder}
 import io.kubernetes.client.apis.BatchV1Api
 import io.kubernetes.client.util.Config
 import okhttp3.OkHttpClient
+import org.scalatest.time.{Millis, Seconds, Span}
 import org.scalatest.{FreeSpecLike, Ignore}
 
 object K8 {
@@ -26,8 +27,8 @@ object K8 {
     )
 }
 
-@Ignore
 class K8SandBoxSpec extends FreeSpecLike with K8BatchApiSupport with AkkaSupport {
+  implicit lazy val futurePatience = PatienceConfig(timeout = Span(10, Seconds), interval = Span(300, Millis))
   private lazy val apiClient =
     Config.fromToken(
       K8.conf.serverApiUrl,

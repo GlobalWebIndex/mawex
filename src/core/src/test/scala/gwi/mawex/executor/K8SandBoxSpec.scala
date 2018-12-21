@@ -27,6 +27,7 @@ object K8 {
     )
 }
 
+@Ignore
 class K8SandBoxSpec extends FreeSpecLike with K8BatchApiSupport with AkkaSupport {
   implicit lazy val futurePatience = PatienceConfig(timeout = Span(10, Seconds), interval = Span(300, Millis))
   private lazy val apiClient =

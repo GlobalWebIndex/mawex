@@ -40,7 +40,7 @@ trait K8BatchApiSupport extends LazyLogging {
     Option(job.getStatus.getConditions).map(_.asScala.map( c => s"${c.getType} ${c.getStatus}").mkString("\n","\n","\n")).getOrElse("")
 
   protected[mawex] def runJob(jobName: JobName, conf: K8JobConf, executorCmd: K8sExecutorCmd)(implicit batchApi: BatchV1Api, ioEC: ExecutionContext): Future[V1Job] = {
-    val envVarsMap = sys.env ++ executorCmd.jvmOpts.map(opt => Map("JAVA_TOOL_OPTIONS" -> opt) ).getOrElse(Map.empty)
+    val envVarsMap = sys.env.filterKeys( key => !key.contains("JAVA") && !key.contains("HEAP") && !key.contains("JVM"))
     val envVars =
       envVarsMap.foldLeft(List.empty[V1EnvVar]) { case (acc, (k,v)) =>
         new V1EnvVarBuilder().withName(k).withValue(v).build() :: acc

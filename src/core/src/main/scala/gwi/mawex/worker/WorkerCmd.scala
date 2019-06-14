@@ -2,6 +2,7 @@ package gwi.mawex.worker
 
 import akka.actor.{ActorRef, ActorSystem, Address, AddressFromURIString, Props, RootActorPath}
 import akka.cluster.client.{ClusterClient, ClusterClientSettings}
+import com.typesafe.config.Config
 import com.typesafe.scalalogging.LazyLogging
 import gwi.mawex.RemoteService.HostAddress
 import gwi.mawex._
@@ -54,10 +55,10 @@ object WorkerCmd extends Command(name = "workers", description = "launches worke
     system.actorOf(ClusterClient.props(ClusterClientSettings(system).withInitialContacts(initialContacts)), "clusterClient")
   }
 
-  private def buildCommand(clazz: Class[_], args: Seq[String]) = {
+  private def buildCommand(clazz: Class[_], args: Seq[String], config: Config) = {
     Cli.parse(("command" +: args).toArray)
       .withCommands(clazz.newInstance().asInstanceOf[MawexCommandBuilder[MawexCommand]])
-      .map(_.build)
+      .map(_.build(config))
       .getOrElse(throw new IllegalArgumentException(s"Invalid arguments : " + args.mkString("\n", "\n", "\n")))
   }
 
@@ -85,11 +86,11 @@ object WorkerCmd extends Command(name = "workers", description = "launches worke
   }
 
   def run(): Unit = {
+    val system = RemoteService.buildRemoteSystem(Address("akka.tcp", Worker.SystemName, Some(hostAddress.host), Some(hostAddress.port)), getAppConf)
     val commandArgSeq = commandBuilderArgs.map(_.split(" ").filter(_.nonEmpty).toSeq).getOrElse(Seq.empty)
-    val commandOpt = commandBuilderClass.map( className => buildCommand(Class.forName(className), commandArgSeq) )
+    val commandOpt = commandBuilderClass.map( className => buildCommand(Class.forName(className), commandArgSeq, system.settings.config))
     val executorClazz = Class.forName(executorClass)
     val executorProps = commandOpt.fold(Props(executorClazz))(cmd => Props(executorClazz, cmd))
-    val system = RemoteService.buildRemoteSystem(Address("akka.tcp", Worker.SystemName, Some(hostAddress.host), Some(hostAddress.port)), getAppConf)
     val clusterClient = workerClusterClient(seedNodes, system)
     consumerGroups.foreach { consumerGroup =>
       workerActorRef(

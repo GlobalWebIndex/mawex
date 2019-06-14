@@ -1,5 +1,6 @@
 package gwi.mawex
 
+import com.typesafe.config.Config
 import org.backuity.clist.Command
 
 /**
@@ -29,7 +30,7 @@ object p2c {
   * It exists merely because of the fact that MawexCommand must be serializable case class
   */
 abstract class MawexCommandBuilder[C <: MawexCommand] extends Command(name = "command") {
-  def build: C
+  def build(config: Config): C
 }
 
 /**

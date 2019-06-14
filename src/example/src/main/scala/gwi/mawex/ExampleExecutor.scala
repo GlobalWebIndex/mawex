@@ -1,7 +1,7 @@
 package gwi.mawex
 
 import akka.actor.{Actor, ActorLogging}
-
+import com.typesafe.config.Config
 import org.backuity.clist._
 
 case class ExampleCommand(foo: String) extends MawexCommand {
@@ -16,7 +16,7 @@ case class ExampleCommand(foo: String) extends MawexCommand {
 class ExampleCommandBuilder extends MawexCommandBuilder[ExampleCommand] {
   var foo = opt[String](default = "bar")
 
-  def build = ExampleCommand(foo)
+  def build(config: Config) = ExampleCommand(foo)
 }
 
 class ExampleExecutor(cmd: ExampleCommand) extends Actor with ActorLogging {

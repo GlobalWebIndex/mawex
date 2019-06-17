@@ -13,7 +13,7 @@ import org.backuity.clist.util.Read
 
 import scala.collection.JavaConverters._
 
-protected[mawex] trait MawexService { this: Command =>
+trait MawexService { this: Command =>
   def run(): Unit
 }
 

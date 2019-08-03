@@ -7,6 +7,7 @@ import org.backuity.clist.{Command, opt}
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
+import scala.util.{Failure, Success}
 
 sealed trait ExecutorCmd {
   def commands: List[String]
@@ -36,9 +37,13 @@ object ExecutorCmd extends Command(name = "executor", description = "launches ex
     logger.debug(s"Starting executor and connecting to ${sandboxActorPath.get}")
     val executorSystem = RemoteService.buildRemoteSystem(Address("akka.tcp", SystemName, AddressFromURIString(sandboxActorPath.get).host.get, 0), getAppConf)
     executorSystem.actorOf(Props(classOf[SandboxFrontDesk], executorSystem.actorSelection(sandboxActorPath.get)))
-    executorSystem.whenTerminated.onComplete { _ =>
-      logger.debug("Remote Actor System just shut down, exiting jvm process !!!")
-      System.exit(0)
+    executorSystem.whenTerminated.onComplete {
+      case Success(_) =>
+        logger.debug("Remote Actor System just shut down, exiting jvm process !!!")
+        System.exit(0)
+      case Failure(ex) =>
+        logger.error("Remote Actor System just shut down with failure", ex)
+        System.exit(1)
     }(ExecutionContext.Implicits.global)
     sys.addShutdownHook(Option(executorSystem).foreach(_.terminate()))
   }
